@@ -23,4 +23,5 @@ export interface ChartConfig {
   title: string;
   xAxis: string;
   variables: VariableConfig[];
+  normalizeX?: boolean;
 }
