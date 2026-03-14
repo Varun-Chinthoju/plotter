@@ -1,30 +1,52 @@
 import React, { useMemo } from 'react';
 import Plot from 'react-plotly.js';
-import type { ChartConfig, TelemetryData } from '../types';
+import type { ChartConfig, Dataset } from '../types';
 
 interface ChartProps {
   config: ChartConfig;
-  data: TelemetryData;
+  datasets: Dataset[];
 }
 
-const Chart: React.FC<ChartProps> = ({ config, data }) => {
+export const CHART_COLORS = [
+  '#3b82f6', // blue-500
+  '#1d4ed8', // blue-700
+  '#10b981', // emerald-500
+  '#ef4444', // red-500
+  '#f59e0b', // amber-500
+  '#8b5cf6', // violet-500
+  '#ec4899', // pink-500
+  '#14b8a6', // teal-500
+  '#6366f1', // indigo-500
+  '#f43f5e', // rose-500
+];
+
+const Chart: React.FC<ChartProps> = ({ config, datasets }) => {
   const plotData = useMemo(() => {
+    let colorIndex = 0;
+    
     return config.variables
       .filter((v) => v.enabled)
       .map((v) => {
-        const xValues = data.data.map((row) => row[config.xAxis]);
-        const yValues = data.data.map((row) => row[v.variable]);
+        const dataset = datasets.find(d => d.id === v.datasetId);
+        if (!dataset) return null;
+
+        const xValues = dataset.data.data.map((row) => row[config.xAxis]);
+        const yValues = dataset.data.data.map((row) => row[v.variable]);
+
+        const traceColor = CHART_COLORS[colorIndex % CHART_COLORS.length];
+        colorIndex++;
 
         return {
           x: xValues,
           y: yValues,
-          name: v.variable,
+          name: `${v.variable} (${dataset.name})`,
           type: 'scatter' as const,
           mode: 'lines' as const,
+          line: { color: traceColor, width: 2 },
           yaxis: v.yAxis === 'y2' ? ('y2' as const) : ('y' as const),
         };
-      });
-  }, [config, data]);
+      }).filter(Boolean);
+  }, [config, datasets]);
 
   const hasY2 = config.variables.some((v) => v.enabled && v.yAxis === 'y2');
 
@@ -35,11 +57,11 @@ const Chart: React.FC<ChartProps> = ({ config, data }) => {
     margin: { l: 50, r: 50, b: 50, t: 80, pad: 4 },
     xaxis: {
       title: { text: config.xAxis },
-      gridcolor: '#e5e7eb',
+      gridcolor: '#e2e8f0',
     },
     yaxis: {
       title: { text: 'Primary Axis' },
-      gridcolor: '#e5e7eb',
+      gridcolor: '#e2e8f0',
     },
     ...(hasY2 && {
       yaxis2: {
@@ -58,12 +80,13 @@ const Chart: React.FC<ChartProps> = ({ config, data }) => {
     },
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
+    hovermode: 'closest' as const,
   };
 
   return (
-    <div className="w-full h-[500px] bg-white rounded-lg shadow-sm overflow-hidden p-4">
+    <div className="w-full h-full bg-white rounded-lg shadow-sm overflow-hidden p-4 border border-slate-100">
       <Plot
-        data={plotData}
+        data={plotData as any}
         layout={layout}
         useResizeHandler={true}
         style={{ width: '100%', height: '100%' }}

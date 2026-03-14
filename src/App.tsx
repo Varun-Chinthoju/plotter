@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import Papa from 'papaparse';
-import { Upload, Plus, Trash2, Settings2, X } from 'lucide-react';
-import type { ChartConfig, TelemetryData } from './types';
+import { Upload, Plus, Trash2, Settings2, X, FileText, Edit2, Check, LayoutGrid, LayoutList, Columns } from 'lucide-react';
+import type { ChartConfig, Dataset } from './types';
 import Chart from './components/Chart';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -11,38 +11,58 @@ function cn(...inputs: ClassValue[]) {
 }
 
 const App: React.FC = () => {
-  const [telemetryData, setTelemetryData] = useState<TelemetryData | null>(null);
+  const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [activeDatasetId, setActiveDatasetId] = useState<string | null>(null);
   const [charts, setCharts] = useState<ChartConfig[]>([]);
   const [activeConfigId, setActiveConfigId] = useState<string | null>(null);
+  const [editingDatasetId, setEditingDatasetId] = useState<string | null>(null);
+  const [tempDatasetName, setTempDatasetName] = useState('');
+  const [layoutMode, setLayoutMode] = useState<'single' | 'grid'>('single');
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
 
-    Papa.parse(file, {
-      header: true,
-      dynamicTyping: true,
-      complete: (results) => {
-        const headers = results.meta.fields || [];
-        setTelemetryData({
-          headers,
-          data: results.data as any[],
-        });
-        
-        // Clear existing charts if headers change significantly
-        setCharts([]);
-      },
+    Array.from(files).forEach((file) => {
+      Papa.parse(file, {
+        header: true,
+        dynamicTyping: true,
+        complete: (results) => {
+          const headers = results.meta.fields || [];
+          const newDataset: Dataset = {
+            id: Math.random().toString(36).substr(2, 9),
+            name: file.name.replace('.csv', ''),
+            data: {
+              headers,
+              data: results.data as any[],
+            },
+          };
+          
+          setDatasets((prev) => {
+            const updated = [...prev, newDataset];
+            if (!activeDatasetId) setActiveDatasetId(newDataset.id);
+            return updated;
+          });
+        },
+      });
     });
+    // Clear input
+    event.target.value = '';
   };
 
+  const activeDataset = datasets.find(d => d.id === activeDatasetId);
+  const activeDatasetCharts = charts.filter(c => c.datasetId === activeDatasetId);
+
   const addChart = useCallback(() => {
-    if (!telemetryData) return;
+    if (!activeDatasetId || !activeDataset) return;
     
     const newChart: ChartConfig = {
       id: Math.random().toString(36).substr(2, 9),
-      title: `Chart ${charts.length + 1}`,
-      xAxis: telemetryData.headers[0],
-      variables: telemetryData.headers.slice(1).map(h => ({
+      datasetId: activeDatasetId,
+      title: `Chart ${activeDatasetCharts.length + 1}`,
+      xAxis: activeDataset.data.headers[0],
+      variables: activeDataset.data.headers.slice(1).map(h => ({
+        datasetId: activeDatasetId,
         variable: h,
         enabled: false,
         yAxis: 'y'
@@ -51,7 +71,7 @@ const App: React.FC = () => {
     
     setCharts([...charts, newChart]);
     setActiveConfigId(newChart.id);
-  }, [telemetryData, charts]);
+  }, [activeDatasetId, activeDataset, charts, activeDatasetCharts.length]);
 
   const removeChart = (id: string) => {
     setCharts(charts.filter(c => c.id !== id));
@@ -62,28 +82,58 @@ const App: React.FC = () => {
     setCharts(charts.map(c => c.id === id ? { ...c, ...updates } : c));
   };
 
-  const toggleVariable = (chartId: string, varName: string) => {
+  const toggleVariable = (chartId: string, datasetId: string, varName: string) => {
+    setCharts(charts.map(c => {
+      if (c.id !== chartId) return c;
+      
+      const variableExists = c.variables.some(v => v.datasetId === datasetId && v.variable === varName);
+      
+      if (variableExists) {
+        return {
+          ...c,
+          variables: c.variables.map(v => 
+            (v.datasetId === datasetId && v.variable === varName) ? { ...v, enabled: !v.enabled } : v
+          )
+        };
+      } else {
+        // This case handles adding cross-dataset variables if they weren't in the initial list
+        return {
+          ...c,
+          variables: [...c.variables, { datasetId, variable: varName, enabled: true, yAxis: 'y' }]
+        };
+      }
+    }));
+  };
+
+  const setVariableYAxis = (chartId: string, datasetId: string, varName: string, yAxis: 'y' | 'y2') => {
     setCharts(charts.map(c => {
       if (c.id !== chartId) return c;
       return {
         ...c,
         variables: c.variables.map(v => 
-          v.variable === varName ? { ...v, enabled: !v.enabled } : v
+          (v.datasetId === datasetId && v.variable === varName) ? { ...v, yAxis } : v
         )
       };
     }));
   };
 
-  const setVariableYAxis = (chartId: string, varName: string, yAxis: 'y' | 'y2') => {
-    setCharts(charts.map(c => {
-      if (c.id !== chartId) return c;
-      return {
-        ...c,
-        variables: c.variables.map(v => 
-          v.variable === varName ? { ...v, yAxis } : v
-        )
-      };
-    }));
+  const deleteDataset = (id: string) => {
+    setDatasets(datasets.filter(d => d.id !== id));
+    setCharts(charts.filter(c => c.datasetId !== id));
+    if (activeDatasetId === id) {
+      const remaining = datasets.filter(d => d.id !== id);
+      setActiveDatasetId(remaining.length > 0 ? remaining[0].id : null);
+    }
+  };
+
+  const startEditingDataset = (id: string, name: string) => {
+    setEditingDatasetId(id);
+    setTempDatasetName(name);
+  };
+
+  const saveDatasetName = (id: string) => {
+    setDatasets(datasets.map(d => d.id === id ? { ...d, name: tempDatasetName } : d));
+    setEditingDatasetId(null);
   };
 
   return (
@@ -95,13 +145,38 @@ const App: React.FC = () => {
         </div>
         
         <div className="flex items-center gap-3">
+          {datasets.length > 0 && (
+            <div className="flex bg-white border border-slate-200 rounded-lg p-1 shadow-sm mr-2">
+              <button 
+                onClick={() => setLayoutMode('single')}
+                className={cn(
+                  "p-1.5 rounded-md transition-all",
+                  layoutMode === 'single' ? "bg-slate-100 text-blue-600" : "text-slate-400 hover:text-slate-600"
+                )}
+                title="Single Column View"
+              >
+                <LayoutList size={18} />
+              </button>
+              <button 
+                onClick={() => setLayoutMode('grid')}
+                className={cn(
+                  "p-1.5 rounded-md transition-all",
+                  layoutMode === 'grid' ? "bg-slate-100 text-blue-600" : "text-slate-400 hover:text-slate-600"
+                )}
+                title="Grid Comparison View"
+              >
+                <LayoutGrid size={18} />
+              </button>
+            </div>
+          )}
+
           <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition-colors shadow-sm">
             <Upload size={18} />
-            <span>Upload CSV</span>
-            <input type="file" accept=".csv" onChange={handleFileUpload} className="hidden" />
+            <span>Upload CSV(s)</span>
+            <input type="file" accept=".csv" multiple onChange={handleFileUpload} className="hidden" />
           </label>
           
-          {telemetryData && (
+          {activeDataset && (
             <button 
               onClick={addChart}
               className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 rounded-lg transition-colors shadow-sm"
@@ -113,25 +188,82 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {!telemetryData ? (
+      {datasets.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mb-8 border-b border-slate-200 pb-2 overflow-x-auto">
+          {datasets.map((dataset) => (
+            <div 
+              key={dataset.id}
+              className={cn(
+                "group flex items-center gap-2 px-4 py-2 rounded-t-lg transition-all cursor-pointer border-x border-t -mb-[9px]",
+                activeDatasetId === dataset.id 
+                  ? "bg-white border-slate-200 text-blue-600 font-semibold shadow-[0_-2px_4px_rgba(0,0,0,0.02)]" 
+                  : "bg-slate-100 border-transparent text-slate-500 hover:bg-slate-200"
+              )}
+              onClick={() => setActiveDatasetId(dataset.id)}
+            >
+              <FileText size={16} />
+              {editingDatasetId === dataset.id ? (
+                <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                  <input 
+                    autoFocus
+                    value={tempDatasetName}
+                    onChange={(e) => setTempDatasetName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && saveDatasetName(dataset.id)}
+                    className="w-32 px-1 text-sm bg-white border border-blue-300 rounded outline-none"
+                  />
+                  <button onClick={() => saveDatasetName(dataset.id)} className="text-green-600 hover:bg-green-50 p-0.5 rounded">
+                    <Check size={14} />
+                  </button>
+                </div>
+              ) : (
+                <span className="text-sm truncate max-w-[150px]">{dataset.name}</span>
+              )}
+              
+              <div className={cn(
+                "flex items-center gap-0.5 transition-opacity",
+                activeDatasetId === dataset.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+              )}>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); startEditingDataset(dataset.id, dataset.name); }}
+                  className="p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-600"
+                >
+                  <Edit2 size={14} />
+                </button>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); deleteDataset(dataset.id); }}
+                  className="p-1 hover:bg-red-50 rounded text-slate-400 hover:text-red-600"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {datasets.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 bg-white border-2 border-dashed border-slate-200 rounded-2xl">
           <div className="bg-slate-100 p-4 rounded-full mb-4">
             <Upload size={32} className="text-slate-400" />
           </div>
           <h2 className="text-xl font-semibold mb-2">No telemetry data loaded</h2>
           <p className="text-slate-500 text-center max-w-sm">
-            Upload a CSV file to begin visualizing your data. The first column will be treated as the X-axis by default.
+            Upload one or more CSV files to begin. Each file will open in a new tab.
           </p>
         </div>
       ) : (
         <div className="space-y-8 max-w-[1400px] mx-auto">
-          {charts.length === 0 ? (
-            <div className="text-center py-20 text-slate-400">
+          {activeDatasetCharts.length === 0 ? (
+            <div className="text-center py-20 text-slate-400 bg-white border border-slate-100 rounded-xl">
+              No charts in <span className="font-semibold text-slate-600">"{activeDataset?.name}"</span>. 
               Click "Add Chart" to start visualizing.
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-8">
-              {charts.map((chart) => (
+            <div className={cn(
+              "grid gap-8 transition-all duration-300",
+              layoutMode === 'grid' ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1"
+            )}>
+              {activeDatasetCharts.map((chart) => (
                 <div key={chart.id} className="relative group">
                   <div className="absolute right-4 top-4 z-10 flex gap-2">
                     <button 
@@ -150,7 +282,12 @@ const App: React.FC = () => {
                     </button>
                   </div>
 
-                  <Chart config={chart} data={telemetryData} />
+                  <div className={cn(
+                    "transition-all duration-300",
+                    layoutMode === 'grid' ? "h-[450px]" : "h-[500px]"
+                  )}>
+                    <Chart config={chart} datasets={datasets} />
+                  </div>
 
                   {activeConfigId === chart.id && (
                     <div className="mt-4 p-6 bg-white rounded-xl shadow-lg border border-slate-100 animate-in fade-in slide-in-from-top-2 duration-200">
@@ -183,40 +320,62 @@ const App: React.FC = () => {
                               onChange={(e) => updateChart(chart.id, { xAxis: e.target.value })}
                               className="w-full px-3 py-2 border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 outline-none"
                             >
-                              {telemetryData.headers.map(h => (
+                              {datasets.find(d => d.id === chart.datasetId)?.data.headers.map(h => (
                                 <option key={h} value={h}>{h}</option>
                               ))}
                             </select>
+                          </div>
+                          
+                          <div className="pt-2">
+                            <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                              <Columns size={16} className="text-slate-400" />
+                              Comparison Options
+                            </h4>
+                            <p className="text-xs text-slate-500">
+                              You can toggle variables from the current dataset below. To compare across datasets, add a new variable from the comparison panel.
+                            </p>
                           </div>
                         </div>
 
                         <div>
                           <label className="block text-sm font-semibold text-slate-700 mb-3">Variables</label>
-                          <div className="max-h-60 overflow-y-auto pr-2 space-y-2 border border-slate-100 rounded-lg p-2">
-                            {chart.variables.map(v => (
-                              <div key={v.variable} className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-md transition-colors">
-                                <div className="flex items-center gap-3">
-                                  <input 
-                                    type="checkbox" 
-                                    checked={v.enabled}
-                                    onChange={() => toggleVariable(chart.id, v.variable)}
-                                    className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
-                                  />
-                                  <span className={cn("text-sm font-medium", !v.enabled && "text-slate-400")}>{v.variable}</span>
+                          <div className="max-h-80 overflow-y-auto pr-2 space-y-4 border border-slate-100 rounded-lg p-3">
+                            {/* Group by dataset for comparison */}
+                            {datasets.map(ds => (
+                              <div key={ds.id} className="space-y-1">
+                                <div className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-1 px-1 flex items-center justify-between">
+                                  <span>{ds.name} {ds.id === chart.datasetId && '(Primary)'}</span>
                                 </div>
-                                {v.enabled && (
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-[10px] uppercase font-bold text-slate-400">Axis:</span>
-                                    <select 
-                                      value={v.yAxis}
-                                      onChange={(e) => setVariableYAxis(chart.id, v.variable, e.target.value as 'y' | 'y2')}
-                                      className="text-xs border border-slate-200 rounded px-1 py-0.5 outline-none bg-white"
-                                    >
-                                      <option value="y">Y1 (Left)</option>
-                                      <option value="y2">Y2 (Right)</option>
-                                    </select>
-                                  </div>
-                                )}
+                                {ds.data.headers.filter(h => h !== chart.xAxis).map(h => {
+                                  const config = chart.variables.find(v => v.datasetId === ds.id && v.variable === h);
+                                  const isEnabled = config?.enabled || false;
+                                  
+                                  return (
+                                    <div key={h} className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-md transition-colors">
+                                      <div className="flex items-center gap-3">
+                                        <input 
+                                          type="checkbox" 
+                                          checked={isEnabled}
+                                          onChange={() => toggleVariable(chart.id, ds.id, h)}
+                                          className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <span className={cn("text-sm font-medium", !isEnabled && "text-slate-400")}>{h}</span>
+                                      </div>
+                                      {isEnabled && (
+                                        <div className="flex items-center gap-2">
+                                          <select 
+                                            value={config?.yAxis || 'y'}
+                                            onChange={(e) => setVariableYAxis(chart.id, ds.id, h, e.target.value as 'y' | 'y2')}
+                                            className="text-[10px] border border-slate-200 rounded px-1 py-0.5 outline-none bg-white font-bold text-slate-600"
+                                          >
+                                            <option value="y">Y1</option>
+                                            <option value="y2">Y2</option>
+                                          </select>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             ))}
                           </div>
