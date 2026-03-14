@@ -5,6 +5,8 @@ import type { ChartConfig, Dataset } from '../types';
 interface ChartProps {
   config: ChartConfig;
   datasets: Dataset[];
+  onRelayout?: (event: Readonly<Plotly.PlotRelayoutEvent>) => void;
+  xaxisRange?: [number | string, number | string];
 }
 
 export const CHART_COLORS = [
@@ -20,7 +22,7 @@ export const CHART_COLORS = [
   '#f43f5e', // rose-500
 ];
 
-const Chart: React.FC<ChartProps> = ({ config, datasets }) => {
+const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange }) => {
   const plotData = useMemo(() => {
     return config.variables
       .filter((v) => v.enabled)
@@ -55,6 +57,7 @@ const Chart: React.FC<ChartProps> = ({ config, datasets }) => {
     xaxis: {
       title: { text: config.xAxis },
       gridcolor: '#e2e8f0',
+      range: xaxisRange,
     },
     yaxis: {
       title: { text: 'Primary Axis' },
@@ -87,6 +90,7 @@ const Chart: React.FC<ChartProps> = ({ config, datasets }) => {
         layout={layout}
         useResizeHandler={true}
         style={{ width: '100%', height: '100%' }}
+        onRelayout={onRelayout}
         config={{
           responsive: true,
           displaylogo: false,

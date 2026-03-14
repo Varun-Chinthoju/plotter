@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import Papa from 'papaparse';
-import { Upload, Plus, Trash2, Settings2, X, FileText, Edit2, Check, LayoutGrid, LayoutList, Columns, Palette } from 'lucide-react';
+import { Upload, Plus, Trash2, Settings2, X, FileText, Edit2, Check, LayoutGrid, LayoutList, Columns, Palette, Link, Link2Off, Move } from 'lucide-react';
 import type { ChartConfig, Dataset } from './types';
 import Chart, { CHART_COLORS } from './components/Chart';
 import { clsx, type ClassValue } from 'clsx';
@@ -10,6 +10,17 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// Helper to invert hex color
+const invertColor = (hex: string): string => {
+  if (hex.indexOf('#') === 0) hex = hex.slice(1);
+  if (hex.length === 3) hex = hex.split('').map(s => s + s).join('');
+  if (hex.length !== 6) return '#000000';
+  const r = (255 - parseInt(hex.slice(0, 2), 16)).toString(16).padStart(2, '0');
+  const g = (255 - parseInt(hex.slice(2, 4), 16)).toString(16).padStart(2, '0');
+  const b = (255 - parseInt(hex.slice(4, 6), 16)).toString(16).padStart(2, '0');
+  return `#${r}${g}${b}`;
+};
+
 const App: React.FC = () => {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [activeDatasetId, setActiveDatasetId] = useState<string | null>(null);
@@ -18,6 +29,9 @@ const App: React.FC = () => {
   const [editingDatasetId, setEditingDatasetId] = useState<string | null>(null);
   const [tempDatasetName, setTempDatasetName] = useState('');
   const [layoutMode, setLayoutMode] = useState<'single' | 'grid'>('single');
+  const [isSynced, setIsSynced] = useState(false);
+  const [sharedRange, setSharedRange] = useState<[number | string, number | string] | undefined>(undefined);
+  const [draggedDatasetId, setDraggedDatasetId] = useState<string | null>(null);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -46,7 +60,6 @@ const App: React.FC = () => {
         },
       });
     });
-    // Clear input
     event.target.value = '';
   };
 
@@ -86,9 +99,7 @@ const App: React.FC = () => {
   const toggleVariable = (chartId: string, datasetId: string, varName: string) => {
     setCharts(charts.map(c => {
       if (c.id !== chartId) return c;
-      
       const variableExists = c.variables.some(v => v.datasetId === datasetId && v.variable === varName);
-      
       if (variableExists) {
         return {
           ...c,
@@ -108,6 +119,30 @@ const App: React.FC = () => {
           }]
         };
       }
+    }));
+  };
+
+  const compareVariableAcrossDatasets = (chartId: string, varName: string) => {
+    setCharts(charts.map(c => {
+      if (c.id !== chartId) return c;
+      const newVariables = [...c.variables];
+      datasets.forEach(ds => {
+        if (ds.data.headers.includes(varName)) {
+          const existing = newVariables.find(v => v.datasetId === ds.id && v.variable === varName);
+          if (existing) {
+            existing.enabled = true;
+          } else {
+            newVariables.push({
+              datasetId: ds.id,
+              variable: varName,
+              enabled: true,
+              yAxis: 'y',
+              color: CHART_COLORS[newVariables.length % CHART_COLORS.length]
+            });
+          }
+        }
+      });
+      return { ...c, variables: newVariables };
     }));
   };
 
@@ -154,6 +189,66 @@ const App: React.FC = () => {
     setEditingDatasetId(null);
   };
 
+  const handleChartRelayout = (event: Readonly<Plotly.PlotRelayoutEvent>) => {
+    if (!isSynced) return;
+    if (event['xaxis.range[0]'] !== undefined && event['xaxis.range[1]'] !== undefined) {
+      setSharedRange([event['xaxis.range[0]'], event['xaxis.range[1]']]);
+    } else if (event['xaxis.autorange'] === true) {
+      setSharedRange(undefined);
+    }
+  };
+
+  // Drag and Drop Logic
+  const handleDragStart = (id: string) => {
+    setDraggedDatasetId(id);
+  };
+
+  const handleDrop = (targetId: string) => {
+    if (!draggedDatasetId || draggedDatasetId === targetId) {
+      setDraggedDatasetId(null);
+      return;
+    }
+
+    const sourceDs = datasets.find(d => d.id === draggedDatasetId);
+    const targetDs = datasets.find(d => d.id === targetId);
+    if (!sourceDs || !targetDs) return;
+
+    // "Every similar graph gets overlap"
+    setCharts(prevCharts => prevCharts.map(chart => {
+      // Only affect charts in the target dataset
+      if (chart.datasetId !== targetId) return chart;
+
+      const primaryVars = chart.variables.filter(v => v.datasetId === targetId && v.enabled);
+      const newVariables = [...chart.variables];
+
+      primaryVars.forEach(primaryVar => {
+        // If the source dataset has the same variable name
+        if (sourceDs.data.headers.includes(primaryVar.variable)) {
+          const existing = newVariables.find(v => v.datasetId === draggedDatasetId && v.variable === primaryVar.variable);
+          const oppositeColor = invertColor(primaryVar.color || CHART_COLORS[0]);
+
+          if (existing) {
+            existing.enabled = true;
+            existing.color = oppositeColor;
+          } else {
+            newVariables.push({
+              datasetId: draggedDatasetId,
+              variable: primaryVar.variable,
+              enabled: true,
+              yAxis: primaryVar.yAxis,
+              color: oppositeColor
+            });
+          }
+        }
+      });
+
+      return { ...chart, variables: newVariables };
+    }));
+
+    setDraggedDatasetId(null);
+    setActiveDatasetId(targetId); // Switch to the target dataset to see results
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans p-6">
       <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -164,27 +259,41 @@ const App: React.FC = () => {
         
         <div className="flex items-center gap-3">
           {datasets.length > 0 && (
-            <div className="flex bg-white border border-slate-200 rounded-lg p-1 shadow-sm mr-2">
+            <div className="flex items-center gap-2">
               <button 
-                onClick={() => setLayoutMode('single')}
+                onClick={() => { setIsSynced(!isSynced); if (!isSynced) setSharedRange(undefined); }}
                 className={cn(
-                  "p-1.5 rounded-md transition-all",
-                  layoutMode === 'single' ? "bg-slate-100 text-blue-600" : "text-slate-400 hover:text-slate-600"
+                  "flex items-center gap-2 px-3 py-2 border rounded-lg transition-all shadow-sm",
+                  isSynced ? "bg-blue-50 border-blue-200 text-blue-600 font-semibold" : "bg-white border-slate-200 text-slate-500 hover:text-slate-700"
                 )}
-                title="Single Column View"
+                title="Sync zooming and panning across all charts"
               >
-                <LayoutList size={18} />
+                {isSynced ? <Link size={18} /> : <Link2Off size={18} />}
+                <span className="text-sm">Sync Zoom</span>
               </button>
-              <button 
-                onClick={() => setLayoutMode('grid')}
-                className={cn(
-                  "p-1.5 rounded-md transition-all",
-                  layoutMode === 'grid' ? "bg-slate-100 text-blue-600" : "text-slate-400 hover:text-slate-600"
-                )}
-                title="Grid Comparison View"
-              >
-                <LayoutGrid size={18} />
-              </button>
+
+              <div className="flex bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
+                <button 
+                  onClick={() => setLayoutMode('single')}
+                  className={cn(
+                    "p-1.5 rounded-md transition-all",
+                    layoutMode === 'single' ? "bg-slate-100 text-blue-600" : "text-slate-400 hover:text-slate-600"
+                  )}
+                  title="Single Column View"
+                >
+                  <LayoutList size={18} />
+                </button>
+                <button 
+                  onClick={() => setLayoutMode('grid')}
+                  className={cn(
+                    "p-1.5 rounded-md transition-all",
+                    layoutMode === 'grid' ? "bg-slate-100 text-blue-600" : "text-slate-400 hover:text-slate-600"
+                  )}
+                  title="Grid Comparison View"
+                >
+                  <LayoutGrid size={18} />
+                </button>
+              </div>
             </div>
           )}
 
@@ -211,14 +320,22 @@ const App: React.FC = () => {
           {datasets.map((dataset) => (
             <div 
               key={dataset.id}
+              draggable
+              onDragStart={() => handleDragStart(dataset.id)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => { e.preventDefault(); handleDrop(dataset.id); }}
               className={cn(
-                "group flex items-center gap-2 px-4 py-2 rounded-t-lg transition-all cursor-pointer border-x border-t -mb-[9px]",
+                "group flex items-center gap-2 px-4 py-2 rounded-t-lg transition-all cursor-pointer border-x border-t -mb-[9px] relative",
                 activeDatasetId === dataset.id 
                   ? "bg-white border-slate-200 text-blue-600 font-semibold shadow-[0_-2px_4px_rgba(0,0,0,0.02)]" 
-                  : "bg-slate-100 border-transparent text-slate-500 hover:bg-slate-200"
+                  : "bg-slate-100 border-transparent text-slate-500 hover:bg-slate-200",
+                draggedDatasetId === dataset.id && "opacity-50"
               )}
               onClick={() => setActiveDatasetId(dataset.id)}
             >
+              <div className="cursor-grab active:cursor-grabbing text-slate-300 group-hover:text-slate-400">
+                <Move size={12} />
+              </div>
               <FileText size={16} />
               {editingDatasetId === dataset.id ? (
                 <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
@@ -267,6 +384,8 @@ const App: React.FC = () => {
           <h2 className="text-xl font-semibold mb-2">No telemetry data loaded</h2>
           <p className="text-slate-500 text-center max-w-sm">
             Upload one or more CSV files to begin. Each file will open in a new tab.
+            <br/><br/>
+            <span className="text-xs font-bold uppercase text-slate-400 tracking-wider">Tip: Drag one tab onto another to overlap identical variables!</span>
           </p>
         </div>
       ) : (
@@ -304,7 +423,12 @@ const App: React.FC = () => {
                     "transition-all duration-300",
                     layoutMode === 'grid' ? "h-[450px]" : "h-[500px]"
                   )}>
-                    <Chart config={chart} datasets={datasets} />
+                    <Chart 
+                      config={chart} 
+                      datasets={datasets} 
+                      onRelayout={handleChartRelayout}
+                      xaxisRange={sharedRange}
+                    />
                   </div>
 
                   {activeConfigId === chart.id && (
@@ -350,7 +474,7 @@ const App: React.FC = () => {
                               Comparison Options
                             </h4>
                             <p className="text-xs text-slate-500">
-                              You can toggle variables from the current dataset below. To compare across datasets, add a new variable from the comparison panel.
+                              Use the <span className="font-bold text-blue-600">"Overlap"</span> button in the variables list to quickly overlay the same variable from all datasets onto this chart.
                             </p>
                           </div>
                         </div>
@@ -379,28 +503,39 @@ const App: React.FC = () => {
                                           />
                                           <span className={cn("text-sm font-medium", !isEnabled && "text-slate-400")}>{h}</span>
                                         </div>
-                                        {isEnabled && (
-                                          <div className="flex items-center gap-3">
-                                            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-white border border-slate-200 rounded-md shadow-sm">
-                                              <Palette size={12} className="text-slate-400" />
-                                              <input 
-                                                type="color" 
-                                                value={config?.color || CHART_COLORS[0]}
-                                                onChange={(e) => setVariableColor(chart.id, ds.id, h, e.target.value)}
-                                                className="w-6 h-4 border-none p-0 bg-transparent cursor-pointer rounded overflow-hidden"
-                                                title="Choose Trace Color"
-                                              />
-                                            </div>
-                                            <select 
-                                              value={config?.yAxis || 'y'}
-                                              onChange={(e) => setVariableYAxis(chart.id, ds.id, h, e.target.value as 'y' | 'y2')}
-                                              className="text-[10px] border border-slate-200 rounded px-1 py-0.5 outline-none bg-white font-bold text-slate-600"
+                                        <div className="flex items-center gap-2">
+                                          {ds.id === chart.datasetId && (
+                                            <button 
+                                              onClick={() => compareVariableAcrossDatasets(chart.id, h)}
+                                              className="text-[10px] bg-blue-50 hover:bg-blue-100 text-blue-600 px-2 py-0.5 rounded font-bold transition-colors"
+                                              title="Overlap this variable from ALL datasets"
                                             >
-                                              <option value="y">Y1</option>
-                                              <option value="y2">Y2</option>
-                                            </select>
-                                          </div>
-                                        )}
+                                              Overlap
+                                            </button>
+                                          )}
+                                          {isEnabled && (
+                                            <div className="flex items-center gap-3">
+                                              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-white border border-slate-200 rounded-md shadow-sm">
+                                                <Palette size={12} className="text-slate-400" />
+                                                <input 
+                                                  type="color" 
+                                                  value={config?.color || CHART_COLORS[0]}
+                                                  onChange={(e) => setVariableColor(chart.id, ds.id, h, e.target.value)}
+                                                  className="w-6 h-4 border-none p-0 bg-transparent cursor-pointer rounded overflow-hidden"
+                                                  title="Choose Trace Color"
+                                                />
+                                              </div>
+                                              <select 
+                                                value={config?.yAxis || 'y'}
+                                                onChange={(e) => setVariableYAxis(chart.id, ds.id, h, e.target.value as 'y' | 'y2')}
+                                                className="text-[10px] border border-slate-200 rounded px-1 py-0.5 outline-none bg-white font-bold text-slate-600"
+                                              >
+                                                <option value="y">Y1</option>
+                                                <option value="y2">Y2</option>
+                                              </select>
+                                            </div>
+                                          )}
+                                        </div>
                                       </div>
                                     </div>
                                   );
