@@ -22,19 +22,16 @@ export const CHART_COLORS = [
 
 const Chart: React.FC<ChartProps> = ({ config, datasets }) => {
   const plotData = useMemo(() => {
-    let colorIndex = 0;
-    
     return config.variables
       .filter((v) => v.enabled)
-      .map((v) => {
+      .map((v, index) => {
         const dataset = datasets.find(d => d.id === v.datasetId);
         if (!dataset) return null;
 
         const xValues = dataset.data.data.map((row) => row[config.xAxis]);
         const yValues = dataset.data.data.map((row) => row[v.variable]);
 
-        const traceColor = CHART_COLORS[colorIndex % CHART_COLORS.length];
-        colorIndex++;
+        const traceColor = v.color || CHART_COLORS[index % CHART_COLORS.length];
 
         return {
           x: xValues,

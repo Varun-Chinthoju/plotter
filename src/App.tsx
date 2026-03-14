@@ -1,8 +1,8 @@
 import React, { useState, useCallback } from 'react';
 import Papa from 'papaparse';
-import { Upload, Plus, Trash2, Settings2, X, FileText, Edit2, Check, LayoutGrid, LayoutList, Columns } from 'lucide-react';
+import { Upload, Plus, Trash2, Settings2, X, FileText, Edit2, Check, LayoutGrid, LayoutList, Columns, Palette } from 'lucide-react';
 import type { ChartConfig, Dataset } from './types';
-import Chart from './components/Chart';
+import Chart, { CHART_COLORS } from './components/Chart';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -61,11 +61,12 @@ const App: React.FC = () => {
       datasetId: activeDatasetId,
       title: `Chart ${activeDatasetCharts.length + 1}`,
       xAxis: activeDataset.data.headers[0],
-      variables: activeDataset.data.headers.slice(1).map(h => ({
+      variables: activeDataset.data.headers.slice(1).map((h, i) => ({
         datasetId: activeDatasetId,
         variable: h,
         enabled: false,
-        yAxis: 'y'
+        yAxis: 'y',
+        color: CHART_COLORS[i % CHART_COLORS.length]
       })),
     };
     
@@ -96,10 +97,15 @@ const App: React.FC = () => {
           )
         };
       } else {
-        // This case handles adding cross-dataset variables if they weren't in the initial list
         return {
           ...c,
-          variables: [...c.variables, { datasetId, variable: varName, enabled: true, yAxis: 'y' }]
+          variables: [...c.variables, { 
+            datasetId, 
+            variable: varName, 
+            enabled: true, 
+            yAxis: 'y',
+            color: CHART_COLORS[c.variables.length % CHART_COLORS.length]
+          }]
         };
       }
     }));
@@ -112,6 +118,18 @@ const App: React.FC = () => {
         ...c,
         variables: c.variables.map(v => 
           (v.datasetId === datasetId && v.variable === varName) ? { ...v, yAxis } : v
+        )
+      };
+    }));
+  };
+
+  const setVariableColor = (chartId: string, datasetId: string, varName: string, color: string) => {
+    setCharts(charts.map(c => {
+      if (c.id !== chartId) return c;
+      return {
+        ...c,
+        variables: c.variables.map(v => 
+          (v.datasetId === datasetId && v.variable === varName) ? { ...v, color } : v
         )
       };
     }));
@@ -340,7 +358,6 @@ const App: React.FC = () => {
                         <div>
                           <label className="block text-sm font-semibold text-slate-700 mb-3">Variables</label>
                           <div className="max-h-80 overflow-y-auto pr-2 space-y-4 border border-slate-100 rounded-lg p-3">
-                            {/* Group by dataset for comparison */}
                             {datasets.map(ds => (
                               <div key={ds.id} className="space-y-1">
                                 <div className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-1 px-1 flex items-center justify-between">
@@ -351,28 +368,40 @@ const App: React.FC = () => {
                                   const isEnabled = config?.enabled || false;
                                   
                                   return (
-                                    <div key={h} className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-md transition-colors">
-                                      <div className="flex items-center gap-3">
-                                        <input 
-                                          type="checkbox" 
-                                          checked={isEnabled}
-                                          onChange={() => toggleVariable(chart.id, ds.id, h)}
-                                          className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
-                                        />
-                                        <span className={cn("text-sm font-medium", !isEnabled && "text-slate-400")}>{h}</span>
-                                      </div>
-                                      {isEnabled && (
-                                        <div className="flex items-center gap-2">
-                                          <select 
-                                            value={config?.yAxis || 'y'}
-                                            onChange={(e) => setVariableYAxis(chart.id, ds.id, h, e.target.value as 'y' | 'y2')}
-                                            className="text-[10px] border border-slate-200 rounded px-1 py-0.5 outline-none bg-white font-bold text-slate-600"
-                                          >
-                                            <option value="y">Y1</option>
-                                            <option value="y2">Y2</option>
-                                          </select>
+                                    <div key={h} className="flex flex-col gap-2 p-2 hover:bg-slate-50 rounded-md transition-colors">
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                          <input 
+                                            type="checkbox" 
+                                            checked={isEnabled}
+                                            onChange={() => toggleVariable(chart.id, ds.id, h)}
+                                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                                          />
+                                          <span className={cn("text-sm font-medium", !isEnabled && "text-slate-400")}>{h}</span>
                                         </div>
-                                      )}
+                                        {isEnabled && (
+                                          <div className="flex items-center gap-3">
+                                            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-white border border-slate-200 rounded-md shadow-sm">
+                                              <Palette size={12} className="text-slate-400" />
+                                              <input 
+                                                type="color" 
+                                                value={config?.color || CHART_COLORS[0]}
+                                                onChange={(e) => setVariableColor(chart.id, ds.id, h, e.target.value)}
+                                                className="w-6 h-4 border-none p-0 bg-transparent cursor-pointer rounded overflow-hidden"
+                                                title="Choose Trace Color"
+                                              />
+                                            </div>
+                                            <select 
+                                              value={config?.yAxis || 'y'}
+                                              onChange={(e) => setVariableYAxis(chart.id, ds.id, h, e.target.value as 'y' | 'y2')}
+                                              className="text-[10px] border border-slate-200 rounded px-1 py-0.5 outline-none bg-white font-bold text-slate-600"
+                                            >
+                                              <option value="y">Y1</option>
+                                              <option value="y2">Y2</option>
+                                            </select>
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
                                   );
                                 })}
