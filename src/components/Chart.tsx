@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import Plot from 'react-plotly.js';
-import { ChartConfig, TelemetryData } from '../types';
+import type { ChartConfig, TelemetryData } from '../types';
 
 interface ChartProps {
   config: ChartConfig;
@@ -21,29 +21,29 @@ const Chart: React.FC<ChartProps> = ({ config, data }) => {
           name: v.variable,
           type: 'scatter' as const,
           mode: 'lines' as const,
-          yaxis: v.yAxis === 'y2' ? 'y2' : 'y',
+          yaxis: v.yAxis === 'y2' ? ('y2' as const) : ('y' as const),
         };
       });
   }, [config, data]);
 
   const hasY2 = config.variables.some((v) => v.enabled && v.yAxis === 'y2');
 
-  const layout = {
-    title: config.title,
+  const layout: Partial<Plotly.Layout> = {
+    title: { text: config.title },
     autosize: true,
     height: 500,
     margin: { l: 50, r: 50, b: 50, t: 80, pad: 4 },
     xaxis: {
-      title: config.xAxis,
+      title: { text: config.xAxis },
       gridcolor: '#e5e7eb',
     },
     yaxis: {
-      title: 'Primary Axis',
+      title: { text: 'Primary Axis' },
       gridcolor: '#e5e7eb',
     },
     ...(hasY2 && {
       yaxis2: {
-        title: 'Secondary Axis',
+        title: { text: 'Secondary Axis' },
         overlaying: 'y',
         side: 'right',
         gridcolor: 'transparent',

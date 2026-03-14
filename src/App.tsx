@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import Papa from 'papaparse';
 import { Upload, Plus, Trash2, Settings2, X } from 'lucide-react';
-import { ChartConfig, TelemetryData, VariableConfig } from './types';
+import type { ChartConfig, TelemetryData } from './types';
 import Chart from './components/Chart';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
