@@ -16,12 +16,6 @@ interface ChartProps {
   isSmall?: boolean;
 }
 
-interface ExtendedPlotly {
-  Fx: {
-    hover: (gd: HTMLElement, evt: Array<{ curveNumber: number; xval: string | number }>) => void;
-  };
-}
-
 const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange, hoverX, onHover, isSmall }) => {
   const gdRef = useRef<HTMLElement | null>(null);
 
@@ -81,11 +75,15 @@ const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange,
 
   useEffect(() => {
     const gd = gdRef.current;
+    const PlotlyFx = (Plotly as unknown as { Fx?: { hover?: (gd: HTMLElement, evt: unknown[]) => void } }).Fx;
     if (gd && hoverX !== null && hoverX !== undefined) {
-      // Cast Plotly to access Fx which might be missing in basic-dist types but exists in runtime
-      (Plotly as unknown as ExtendedPlotly).Fx.hover(gd, [{ curveNumber: 0, xval: hoverX }]);
+      if (PlotlyFx && PlotlyFx.hover) {
+        PlotlyFx.hover(gd, [{ curveNumber: 0, xval: hoverX }]);
+      }
     } else if (gd && hoverX === null) {
-      (Plotly as unknown as ExtendedPlotly).Fx.hover(gd, []);
+      if (PlotlyFx && PlotlyFx.hover) {
+        PlotlyFx.hover(gd, []);
+      }
     }
   }, [hoverX]);
 
@@ -93,10 +91,15 @@ const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange,
   const isXNumeric = plotData.length > 0 && typeof (plotData[0] as { x: unknown[] })?.x[0] === 'number';
 
   const layout: Partial<Plotly.Layout> = {
-    title: { text: config.title, font: { size: isSmall ? 14 : 18 } },
+    title: { 
+      text: config.title, 
+      font: { size: isSmall ? 14 : 18 },
+      x: 0.05,
+      xanchor: 'left'
+    },
     autosize: true,
     height: isSmall ? 350 : 500,
-    margin: { l: 40, r: 40, b: 40, t: 60, pad: 4 },
+    margin: { l: 80, r: 80, b: 60, t: 80, pad: 4 },
     xaxis: {
       title: { text: config.normalizeX ? `${config.xAxis} (Relative)` : config.xAxis, font: { size: isSmall ? 10 : 12 } },
       gridcolor: '#e2e8f0',
@@ -108,21 +111,14 @@ const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange,
       spikesnap: 'cursor',
       showline: true,
       showgrid: true,
+      automargin: false,
     },
     yaxis: {
       title: { text: 'Primary', font: { size: isSmall ? 10 : 12 } },
       gridcolor: '#e2e8f0',
       autorange: true,
+      automargin: false,
     },
-    ...(hasY2 && {
-      yaxis2: {
-        title: { text: 'Secondary', font: { size: isSmall ? 10 : 12 } },
-        overlaying: 'y' as const,
-        side: 'right' as const,
-        gridcolor: 'transparent',
-        autorange: true,
-      },
-    }),
     legend: {
       orientation: 'h' as const,
       yanchor: 'bottom' as const,
@@ -136,8 +132,22 @@ const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange,
     hovermode: 'x unified' as const,
   };
 
+  if (hasY2) {
+    layout.yaxis2 = {
+      title: { text: 'Secondary', font: { size: isSmall ? 10 : 12 } },
+      overlaying: 'y' as const,
+      side: 'right' as const,
+      gridcolor: 'transparent',
+      autorange: true,
+      automargin: false,
+    };
+  }
+
   return (
-    <div className="w-full h-full bg-white rounded-lg shadow-sm overflow-hidden p-2 md:p-4 border border-slate-100">
+    <div 
+      className="w-full bg-white rounded-lg shadow-sm overflow-hidden p-2 md:p-4 border border-slate-100"
+      style={{ height: isSmall ? '350px' : '500px' }} // Strictly fixed height
+    >
       <Plot
         data={plotData as Plotly.Data[]}
         layout={layout}

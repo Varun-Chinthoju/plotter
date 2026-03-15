@@ -2,7 +2,6 @@ import React, { useState, useCallback, useMemo } from 'react';
 import Papa from 'papaparse';
 import { 
   Upload, Plus, Trash2, Settings2, X, FileText, Edit2, 
-  LayoutGrid, LayoutList, 
   Link, Link2Off, Move, GitCompare, MousePointer2, PanelsTopLeft
 } from 'lucide-react';
 import type { ChartConfig, Dataset } from './types';
@@ -32,7 +31,6 @@ const App: React.FC = () => {
   const [activeConfigId, setActiveConfigId] = useState<string | null>(null);
   const [editingDatasetId, setEditingDatasetId] = useState<string | null>(null);
   const [tempDatasetName, setTempDatasetName] = useState('');
-  const [layoutMode, setLayoutMode] = useState<'single' | 'grid'>('single');
   
   const [isZoomSynced, setIsZoomSynced] = useState(false);
   const [isHoverSynced, setIsHoverSynced] = useState(true);
@@ -40,12 +38,12 @@ const App: React.FC = () => {
   const [sharedHoverX, setSharedHoverX] = useState<number | string | null>(null);
   
   const [draggedDatasetId, setDraggedDatasetId] = useState<string | null>(null);
-  const [dropZone, setDropZone] = useState<'left' | 'right' | null>(null);
+  const [dropZone, setDropZone] = useState<'top' | 'bottom' | null>(null);
   
-  const [splitView, setSplitView] = useState<{ enabled: boolean; leftId: string | null; rightId: string | null }>({
+  const [splitView, setSplitView] = useState<{ enabled: boolean; topId: string | null; bottomId: string | null }>({
     enabled: false,
-    leftId: null,
-    rightId: null,
+    topId: null,
+    bottomId: null,
   });
 
   const [showCompareTool, setShowCompareTool] = useState(false);
@@ -67,7 +65,7 @@ const App: React.FC = () => {
             name: file.name.replace('.csv', ''),
             data: {
               headers,
-              data: results.data as any[],
+              data: results.data as Record<string, number | string>[],
             },
           };
           
@@ -194,8 +192,8 @@ const App: React.FC = () => {
       const remaining = datasets.filter(d => d.id !== id);
       setActiveDatasetId(remaining.length > 0 ? remaining[0].id : null);
     }
-    if (splitView.leftId === id || splitView.rightId === id) {
-      setSplitView({ enabled: false, leftId: null, rightId: null });
+    if (splitView.topId === id || splitView.bottomId === id) {
+      setSplitView({ enabled: false, topId: null, bottomId: null });
     }
   };
 
@@ -222,19 +220,19 @@ const App: React.FC = () => {
   const handleDrop = (targetId: string) => {
     if (!draggedDatasetId) return;
     
-    if (dropZone === 'left') {
+    if (dropZone === 'top') {
       setSplitView({
         enabled: true,
-        leftId: draggedDatasetId,
-        rightId: splitView.rightId || (draggedDatasetId === activeDatasetId ? datasets.find(d => d.id !== draggedDatasetId)?.id || null : activeDatasetId)
+        topId: draggedDatasetId,
+        bottomId: splitView.bottomId || (draggedDatasetId === activeDatasetId ? datasets.find(d => d.id !== draggedDatasetId)?.id || null : activeDatasetId)
       });
       setIsZoomSynced(true);
       setIsHoverSynced(true);
-    } else if (dropZone === 'right') {
+    } else if (dropZone === 'bottom') {
       setSplitView({
         enabled: true,
-        leftId: splitView.leftId || (draggedDatasetId === activeDatasetId ? datasets.find(d => d.id !== draggedDatasetId)?.id || null : activeDatasetId),
-        rightId: draggedDatasetId
+        topId: splitView.topId || (draggedDatasetId === activeDatasetId ? datasets.find(d => d.id !== draggedDatasetId)?.id || null : activeDatasetId),
+        bottomId: draggedDatasetId
       });
       setIsZoomSynced(true);
       setIsHoverSynced(true);
@@ -253,7 +251,7 @@ const App: React.FC = () => {
     return datasets.map(ds => {
       const rows = ds.data.data;
       if (rows.length === 0) return null;
-      const xAxis = ds.data.headers[0];
+      const xAxis = ds.data.headers[0]; 
       
       let closestRow = rows[0];
       let minDiff = Infinity;
@@ -282,7 +280,7 @@ const App: React.FC = () => {
     if (!ds) return null;
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between px-2">
+        <div className="flex items-center justify-between px-2 bg-slate-50/80 backdrop-blur py-2 sticky top-0 z-10 rounded-lg border border-slate-200/50 mb-4">
           <h2 className="font-bold text-slate-700 flex items-center gap-2">
             <FileText size={16} className="text-blue-500" /> {ds.name}
           </h2>
@@ -294,13 +292,11 @@ const App: React.FC = () => {
           <div className="grid grid-cols-1 gap-6">
             {dsCharts.map((chart) => (
               <div key={chart.id} className="relative group">
-                <div className="absolute right-3 top-3 z-10 flex gap-1.5">
+                <div className="absolute right-3 top-3 z-10 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button onClick={() => setActiveConfigId(activeConfigId === chart.id ? null : chart.id)} className="p-1.5 bg-white/90 backdrop-blur hover:bg-white text-slate-500 rounded border border-slate-200 shadow-sm"><Settings2 size={14} /></button>
                   <button onClick={() => removeChart(chart.id)} className="p-1.5 bg-white/90 backdrop-blur hover:bg-red-50 text-red-500 rounded border border-slate-200 shadow-sm"><Trash2 size={14} /></button>
                 </div>
-                <div className={cn(isSmall ? "h-[350px]" : "h-[500px]")}>
-                  <Chart config={chart} datasets={datasets} onRelayout={handleChartRelayout} xaxisRange={sharedRange} hoverX={sharedHoverX} onHover={handleChartHover} isSmall={isSmall} />
-                </div>
+                <Chart config={chart} datasets={datasets} onRelayout={handleChartRelayout} xaxisRange={sharedRange} hoverX={sharedHoverX} onHover={handleChartHover} isSmall={isSmall} />
                 {activeConfigId === chart.id && (
                   <div className="mt-2 p-4 bg-white rounded-xl shadow-xl border border-slate-200 z-20 relative animate-in fade-in slide-in-from-top-1 duration-200">
                     <div className="flex items-center justify-between mb-4 border-b pb-2">
@@ -347,33 +343,30 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans p-4 md:p-6 overflow-x-hidden pb-32">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans p-4 md:p-6 overflow-x-hidden pb-48">
       {draggedDatasetId && (
         <>
-          <div onDragOver={(e) => { e.preventDefault(); setDropZone('left'); }} onDragLeave={() => setDropZone(null)} onDrop={(e) => { e.preventDefault(); handleDrop(draggedDatasetId); }} className={cn("fixed left-0 top-0 bottom-0 w-[15%] z-50 transition-all duration-200 pointer-events-auto", dropZone === 'left' ? "bg-blue-500/20 border-r-4 border-blue-500" : "bg-transparent")}>{dropZone === 'left' && <div className="absolute inset-0 flex items-center justify-center text-blue-600 font-bold uppercase tracking-widest rotate-[-90deg]">Split Left</div>}</div>
-          <div onDragOver={(e) => { e.preventDefault(); setDropZone('right'); }} onDragLeave={() => setDropZone(null)} onDrop={(e) => { e.preventDefault(); handleDrop(draggedDatasetId); }} className={cn("fixed right-0 top-0 bottom-0 w-[15%] z-50 transition-all duration-200 pointer-events-auto", dropZone === 'right' ? "bg-blue-500/20 border-l-4 border-blue-500" : "bg-transparent")}>{dropZone === 'right' && <div className="absolute inset-0 flex items-center justify-center text-blue-600 font-bold uppercase tracking-widest rotate-[90deg]">Split Right</div>}</div>
+          <div onDragOver={(e) => { e.preventDefault(); setDropZone('top'); }} onDragLeave={() => setDropZone(null)} onDrop={(e) => { e.preventDefault(); handleDrop(draggedDatasetId); }} className={cn("fixed left-0 right-0 top-0 h-[20%] z-50 transition-all duration-200 pointer-events-auto", dropZone === 'top' ? "bg-blue-500/20 border-b-4 border-blue-500" : "bg-transparent")}>{dropZone === 'top' && <div className="absolute inset-0 flex items-center justify-center text-blue-600 font-bold uppercase tracking-widest">Split Top</div>}</div>
+          <div onDragOver={(e) => { e.preventDefault(); setDropZone('bottom'); }} onDragLeave={() => setDropZone(null)} onDrop={(e) => { e.preventDefault(); handleDrop(draggedDatasetId); }} className={cn("fixed left-0 right-0 bottom-0 h-[20%] z-50 transition-all duration-200 pointer-events-auto", dropZone === 'bottom' ? "bg-blue-500/20 border-t-4 border-blue-500" : "bg-transparent")}>{dropZone === 'bottom' && <div className="absolute inset-0 flex items-center justify-center text-blue-600 font-bold uppercase tracking-widest">Split Bottom</div>}</div>
         </>
       )}
 
       <header className="mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-3">Telemetry Plotter {splitView.enabled && <span className="text-xs px-2 py-1 bg-indigo-100 text-indigo-600 rounded-full font-bold uppercase tracking-tighter">Split View</span>}</h1>
-          <p className="text-slate-500 text-sm mt-1">Side-by-side telemetry analysis.</p>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-3">Telemetry Plotter {splitView.enabled && <span className="text-xs px-2 py-1 bg-indigo-100 text-indigo-600 rounded-full font-bold uppercase tracking-tighter">Parallel View</span>}</h1>
+          <p className="text-slate-500 text-sm mt-1">Parallel X-axis telemetry analysis.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 md:gap-3">
           {datasets.length >= 2 && !splitView.enabled && (
             <button onClick={() => setShowCompareTool(!showCompareTool)} className={cn("flex items-center gap-2 px-3 py-2 border rounded-lg transition-all shadow-sm text-sm", showCompareTool ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50")}><GitCompare size={16} /> <span>Compare</span></button>
           )}
           {splitView.enabled && (
-            <button onClick={() => setSplitView({ enabled: false, leftId: null, rightId: null })} className="flex items-center gap-2 px-3 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold shadow-sm hover:bg-slate-900 transition-all"><PanelsTopLeft size={16} /> Exit Split View</button>
+            <button onClick={() => setSplitView({ enabled: false, topId: null, bottomId: null })} className="flex items-center gap-2 px-3 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold shadow-sm hover:bg-slate-900 transition-all"><PanelsTopLeft size={16} /> Exit Parallel View</button>
           )}
           {datasets.length > 0 && (
             <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
               <button onClick={() => setIsHoverSynced(!isHoverSynced)} className={cn("p-1.5 rounded transition-all", isHoverSynced ? "bg-emerald-50 text-emerald-600" : "text-slate-400 hover:text-slate-600")} title="Sync Hover"><MousePointer2 size={16} /></button>
               <button onClick={() => { setIsZoomSynced(!isZoomSynced); if (!isZoomSynced) setSharedRange(undefined); }} className={cn("p-1.5 rounded transition-all", isZoomSynced ? "bg-blue-50 text-blue-600" : "text-slate-400 hover:text-slate-600")} title="Sync Zoom">{isZoomSynced ? <Link size={16} /> : <Link2Off size={16} />}</button>
-              {!splitView.enabled && (
-                <><div className="w-px h-4 bg-slate-200 mx-1" /><button onClick={() => setLayoutMode('single')} className={cn("p-1.5 rounded transition-all", layoutMode === 'single' ? "bg-slate-100 text-blue-600" : "text-slate-400 hover:text-slate-600")}><LayoutList size={16} /></button><button onClick={() => setLayoutMode('grid')} className={cn("p-1.5 rounded transition-all", layoutMode === 'grid' ? "bg-slate-100 text-blue-600" : "text-slate-400 hover:text-slate-600")}><LayoutGrid size={16} /></button></>
-              )}
             </div>
           )}
           <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition-colors shadow-sm text-sm font-bold"><Upload size={16} /> <span>Upload</span><input type="file" accept=".csv" multiple onChange={handleFileUpload} className="hidden" /></label>
@@ -387,7 +380,7 @@ const App: React.FC = () => {
             <select value={compareSourceId || datasets[0].id} onChange={e => setCompareSourceId(e.target.value)} className="bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500">{datasets.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
             <Move size={14} className="text-indigo-300" />
             <select value={compareTargetId || datasets[1].id} onChange={e => setCompareTargetId(e.target.value)} className="bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500">{datasets.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
-            <div className="flex gap-2 ml-auto"><button onClick={() => { setSplitView({ enabled: true, leftId: compareSourceId || datasets[0].id, rightId: compareTargetId || datasets[1].id }); setIsZoomSynced(true); setIsHoverSynced(true); setShowCompareTool(false); }} className="px-4 py-2 bg-white text-indigo-600 border border-indigo-200 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-all">Split View</button><button onClick={() => performOverlap(compareSourceId || datasets[0].id, compareTargetId || datasets[1].id)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all">Overlap</button></div>
+            <div className="flex gap-2 ml-auto"><button onClick={() => { setSplitView({ enabled: true, topId: compareSourceId || datasets[0].id, bottomId: compareTargetId || datasets[1].id }); setIsZoomSynced(true); setIsHoverSynced(true); setShowCompareTool(false); }} className="px-4 py-2 bg-white text-indigo-600 border border-indigo-200 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-all">Parallel View</button><button onClick={() => performOverlap(compareSourceId || datasets[0].id, compareTargetId || datasets[1].id)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all">Overlap</button></div>
           </div>
         </div>
       )}
@@ -395,7 +388,7 @@ const App: React.FC = () => {
       {datasets.length > 0 && (
         <div className="flex flex-wrap items-center gap-1 mb-6 border-b border-slate-200 pb-2 overflow-x-auto no-scrollbar">
           {datasets.map((dataset) => (
-            <div key={dataset.id} draggable onDragStart={() => setDraggedDatasetId(dataset.id)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); handleDrop(dataset.id); }} className={cn("group flex items-center gap-2 px-3 py-1.5 rounded-t-lg transition-all cursor-pointer border-x border-t -mb-[9px] relative", activeDatasetId === dataset.id && !splitView.enabled ? "bg-white border-slate-200 text-blue-600 font-bold" : "bg-slate-100 border-transparent text-slate-500 hover:bg-slate-200", (splitView.leftId === dataset.id || splitView.rightId === dataset.id) && "border-t-blue-400 border-t-2", draggedDatasetId === dataset.id && "opacity-50 scale-95")} onClick={() => { setActiveDatasetId(dataset.id); if (splitView.enabled) setSplitView({ ...splitView, enabled: false }); }}><div className="cursor-grab active:cursor-grabbing text-slate-300 group-hover:text-slate-400 mr-1"><Move size={10} /></div><span className="text-xs truncate max-w-[120px]">{dataset.name}</span><div className={cn("flex items-center gap-0.5 transition-opacity", activeDatasetId === dataset.id ? "opacity-100" : "opacity-0 group-hover:opacity-100")}><button onClick={(e) => { e.stopPropagation(); setEditingDatasetId(dataset.id); setTempDatasetName(dataset.name); }} className="p-0.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-600"><Edit2 size={12} /></button><button onClick={(e) => { e.stopPropagation(); deleteDataset(dataset.id); }} className="p-0.5 hover:bg-red-50 rounded text-slate-400 hover:text-red-600"><X size={12} /></button></div></div>
+            <div key={dataset.id} draggable onDragStart={() => setDraggedDatasetId(dataset.id)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); handleDrop(dataset.id); }} className={cn("group flex items-center gap-2 px-3 py-1.5 rounded-t-lg transition-all cursor-pointer border-x border-t -mb-[9px] relative", activeDatasetId === dataset.id && !splitView.enabled ? "bg-white border-slate-200 text-blue-600 font-bold" : "bg-slate-100 border-transparent text-slate-500 hover:bg-slate-200", (splitView.topId === dataset.id || splitView.bottomId === dataset.id) && "border-t-blue-400 border-t-2", draggedDatasetId === dataset.id && "opacity-50 scale-95")} onClick={() => { setActiveDatasetId(dataset.id); if (splitView.enabled) setSplitView({ ...splitView, enabled: false }); }}><div className="cursor-grab active:cursor-grabbing text-slate-300 group-hover:text-slate-400 mr-1"><Move size={10} /></div><span className="text-xs truncate max-w-[120px]">{dataset.name}</span><div className={cn("flex items-center gap-0.5 transition-opacity", activeDatasetId === dataset.id ? "opacity-100" : "opacity-0 group-hover:opacity-100")}><button onClick={(e) => { e.stopPropagation(); setEditingDatasetId(dataset.id); setTempDatasetName(dataset.name); }} className="p-0.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-600"><Edit2 size={12} /></button><button onClick={(e) => { e.stopPropagation(); deleteDataset(dataset.id); }} className="p-0.5 hover:bg-red-50 rounded text-slate-400 hover:text-red-600"><X size={12} /></button></div></div>
           ))}
         </div>
       )}
@@ -406,20 +399,20 @@ const App: React.FC = () => {
           <h2 className="text-2xl font-bold mb-2">Ready for Telemetry</h2>
           <p className="text-slate-500 text-center max-w-sm mb-8 px-4 text-sm leading-relaxed">Upload your CSV files to start analyzing. Drag tabs to the screen edges to compare side-by-side.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-xl px-4">
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-xs text-slate-600"><span className="font-bold text-blue-600 block mb-1">↔ SPLIT COMPARE</span>Drag a tab to the <b className="text-slate-900">left or right edge</b> of your screen to tile datasets like Rectangle.</div>
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-xs text-slate-600"><span className="font-bold text-blue-600 block mb-1">↔ PARALLEL COMPARE</span>Drag a tab to the <b className="text-slate-900">top or bottom edge</b> of your screen to stack datasets.</div>
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-xs text-slate-600"><span className="font-bold text-blue-600 block mb-1">⇶ OVERLAP COMPARE</span>Drag one tab <b className="text-slate-900">directly onto another</b> to overlay graphs with inverted colors.</div>
           </div>
         </div>
       ) : splitView.enabled ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-[1800px] mx-auto animate-in fade-in duration-500">
-          <div className="bg-slate-100/50 p-4 rounded-2xl border border-slate-200/60 shadow-inner"><ChartList dsId={splitView.leftId!} isSmall /></div>
-          <div className="bg-slate-100/50 p-4 rounded-2xl border border-slate-200/60 shadow-inner"><ChartList dsId={splitView.rightId!} isSmall /></div>
+        <div className="flex flex-col gap-12 max-w-[1200px] mx-auto animate-in fade-in duration-500">
+          <div className="bg-slate-100/50 p-4 rounded-2xl border border-slate-200/60 shadow-inner">{ChartList({ dsId: splitView.topId!, isSmall: true })}</div>
+          <div className="bg-slate-100/50 p-4 rounded-2xl border border-slate-200/60 shadow-inner">{ChartList({ dsId: splitView.bottomId!, isSmall: true })}</div>
         </div>
       ) : (
-        <div className="max-w-[1400px] mx-auto">
+        <div className="max-w-[1200px] mx-auto">
           {activeDatasetId ? (
-            <div className={cn("grid gap-8 transition-all duration-300", layoutMode === 'grid' ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1")}>
-              <ChartList dsId={activeDatasetId} />
+            <div className="grid grid-cols-1 gap-8">
+              {ChartList({ dsId: activeDatasetId })}
             </div>
           ) : (
             <div className="text-center py-20 text-slate-400">Select a tab to view charts.</div>
@@ -429,27 +422,29 @@ const App: React.FC = () => {
 
       {/* 🛰️ Data HUD (Shared Values) */}
       {sharedHoverX !== null && datasets.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-[60] bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] animate-in slide-in-from-bottom-full duration-300 overflow-x-auto">
-          <div className="max-w-[1800px] mx-auto flex items-start gap-8">
-            <div className="flex flex-col">
-              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">X-Axis Value</span>
-              <span className="text-xl font-black text-blue-600 tabular-nums leading-none">{sharedHoverX}</span>
-            </div>
-            <div className="h-10 w-px bg-slate-200" />
-            <div className="flex-1 flex gap-8">
-              {hudValues?.map((ds, i) => (
-                <div key={i} className="flex flex-col min-w-[200px]">
-                  <span className="text-[10px] uppercase font-bold text-slate-500 truncate mb-1">{ds?.dsName}</span>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-1">
-                    {ds?.values.map((v, j) => (
-                      <div key={j} className="flex items-center justify-between text-[11px] border-b border-slate-100/50 pb-0.5">
-                        <span className="text-slate-400 truncate pr-2">{v.name}:</span>
-                        <span className="font-mono font-bold text-slate-700">{typeof v.val === 'number' ? v.val.toFixed(3) : v.val}</span>
-                      </div>
-                    ))}
+        <div className="fixed bottom-0 left-0 right-0 z-[60] bg-white/90 backdrop-blur-md border-t border-slate-200 p-4 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] animate-in slide-in-from-bottom-full duration-300">
+          <div className="max-w-[1800px] mx-auto overflow-x-auto no-scrollbar">
+            <div className="flex items-start gap-8 min-w-max">
+              <div className="flex flex-col shrink-0">
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">X-Axis Value</span>
+                <span className="text-xl font-black text-blue-600 tabular-nums leading-none">{sharedHoverX}</span>
+              </div>
+              <div className="h-10 w-px bg-slate-200 shrink-0" />
+              <div className="flex gap-12">
+                {hudValues?.map((ds, i) => (
+                  <div key={i} className="flex flex-col shrink-0">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 truncate mb-1 border-b border-slate-100 pb-1">{ds?.dsName}</span>
+                    <div className="flex flex-wrap gap-x-6 gap-y-1 max-w-4xl">
+                      {ds?.values.map((v, j) => (
+                        <div key={j} className="flex items-center gap-2 text-[11px]">
+                          <span className="text-slate-400 whitespace-nowrap">{v.name}:</span>
+                          <span className="font-mono font-bold text-slate-700">{typeof v.val === 'number' ? v.val.toFixed(3) : v.val}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         </div>
