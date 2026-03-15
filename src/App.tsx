@@ -372,8 +372,8 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans p-4 md:p-6 overflow-x-hidden pb-48">
       {draggedDatasetId && (
         <>
-          <div onDragOver={(e) => { e.preventDefault(); setDropZone('top'); }} onDragLeave={() => setDropZone(null)} onDrop={(e) => { e.preventDefault(); handleDrop(draggedDatasetId); }} className={cn("fixed left-0 right-0 top-0 h-[20%] z-50 transition-all duration-200 pointer-events-auto", dropZone === 'top' ? "bg-blue-500/20 border-b-4 border-blue-500" : "bg-transparent")}>{dropZone === 'top' && <div className="absolute inset-0 flex items-center justify-center text-blue-600 font-bold uppercase tracking-widest">Split Top</div>}</div>
-          <div onDragOver={(e) => { e.preventDefault(); setDropZone('bottom'); }} onDragLeave={() => setDropZone(null)} onDrop={(e) => { e.preventDefault(); handleDrop(draggedDatasetId); }} className={cn("fixed left-0 right-0 bottom-0 h-[20%] z-50 transition-all duration-200 pointer-events-auto", dropZone === 'bottom' ? "bg-blue-500/20 border-t-4 border-blue-500" : "bg-transparent")}>{dropZone === 'bottom' && <div className="absolute inset-0 flex items-center justify-center text-blue-600 font-bold uppercase tracking-widest">Split Bottom</div>}</div>
+          <div onDragOver={(e) => { e.preventDefault(); setDropZone('top'); }} onDragLeave={() => setDropZone(null)} onDrop={(e) => { e.preventDefault(); handleDrop(draggedDatasetId); }} className={cn("fixed left-0 right-0 top-[120px] h-[80px] z-50 transition-all duration-200 pointer-events-auto flex items-center justify-center rounded-2xl mx-8", dropZone === 'top' ? "bg-blue-500/20 border-2 border-blue-500" : "bg-blue-500/5 border-2 border-dashed border-blue-300")}><span className="text-blue-600 font-bold uppercase tracking-widest text-xs">↑ Split Top</span></div>
+          <div onDragOver={(e) => { e.preventDefault(); setDropZone('bottom'); }} onDragLeave={() => setDropZone(null)} onDrop={(e) => { e.preventDefault(); handleDrop(draggedDatasetId); }} className={cn("fixed left-0 right-0 bottom-4 h-[80px] z-50 transition-all duration-200 pointer-events-auto flex items-center justify-center rounded-2xl mx-8", dropZone === 'bottom' ? "bg-blue-500/20 border-2 border-blue-500" : "bg-blue-500/5 border-2 border-dashed border-blue-300")}><span className="text-blue-600 font-bold uppercase tracking-widest text-xs">↓ Split Bottom</span></div>
         </>
       )}
 
@@ -414,7 +414,29 @@ const App: React.FC = () => {
       {datasets.length > 0 && (
         <div className="flex flex-wrap items-center gap-1 mb-6 border-b border-slate-200 pb-2 overflow-x-auto no-scrollbar">
           {datasets.map((dataset) => (
-            <div key={dataset.id} draggable onDragStart={() => setDraggedDatasetId(dataset.id)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); handleDrop(dataset.id); }} className={cn("group flex items-center gap-2 px-3 py-1.5 rounded-t-lg transition-all cursor-pointer border-x border-t -mb-[9px] relative", activeDatasetId === dataset.id && !splitView.enabled ? "bg-white border-slate-200 text-blue-600 font-bold" : "bg-slate-100 border-transparent text-slate-500 hover:bg-slate-200", (splitView.topId === dataset.id || splitView.bottomId === dataset.id) && "border-t-blue-400 border-t-2", draggedDatasetId === dataset.id && "opacity-50 scale-95")} onClick={() => { setActiveDatasetId(dataset.id); if (splitView.enabled) setSplitView({ ...splitView, enabled: false }); }}><div className="cursor-grab active:cursor-grabbing text-slate-300 group-hover:text-slate-400 mr-1"><Move size={10} /></div><span className="text-xs truncate max-w-[120px]">{dataset.name}</span><div className={cn("flex items-center gap-0.5 transition-opacity", activeDatasetId === dataset.id ? "opacity-100" : "opacity-0 group-hover:opacity-100")}><button onClick={(e) => { e.stopPropagation(); setEditingDatasetId(dataset.id); setTempDatasetName(dataset.name); }} className="p-0.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-600"><Edit2 size={12} /></button><button onClick={(e) => { e.stopPropagation(); deleteDataset(dataset.id); }} className="p-0.5 hover:bg-red-50 rounded text-slate-400 hover:text-red-600"><X size={12} /></button></div></div>
+            <div
+              key={dataset.id}
+              draggable
+              onDragStart={() => setDraggedDatasetId(dataset.id)}
+              onDragEnd={() => { setDraggedDatasetId(null); setDropZone(null); }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => { e.preventDefault(); e.stopPropagation(); if (dropZone === null) handleDrop(dataset.id); }}
+              className={cn(
+                "group flex items-center gap-2 px-3 py-1.5 rounded-t-lg transition-all cursor-pointer border-x border-t -mb-[9px] relative",
+                activeDatasetId === dataset.id && !splitView.enabled ? "bg-white border-slate-200 text-blue-600 font-bold" : "bg-slate-100 border-transparent text-slate-500 hover:bg-slate-200",
+                (splitView.topId === dataset.id || splitView.bottomId === dataset.id) && "border-t-blue-400 border-t-2",
+                draggedDatasetId === dataset.id && "opacity-50 scale-95",
+                draggedDatasetId && draggedDatasetId !== dataset.id && "ring-2 ring-indigo-300 ring-offset-1"
+              )}
+              onClick={() => { setActiveDatasetId(dataset.id); if (splitView.enabled) setSplitView({ ...splitView, enabled: false }); }}
+            >
+              <div className="cursor-grab active:cursor-grabbing text-slate-300 group-hover:text-slate-400 mr-1"><Move size={10} /></div>
+              <span className="text-xs truncate max-w-[120px]">{dataset.name}</span>
+              <div className={cn("flex items-center gap-0.5 transition-opacity", activeDatasetId === dataset.id ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
+                <button onClick={(e) => { e.stopPropagation(); setEditingDatasetId(dataset.id); setTempDatasetName(dataset.name); }} className="p-0.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-600"><Edit2 size={12} /></button>
+                <button onClick={(e) => { e.stopPropagation(); deleteDataset(dataset.id); }} className="p-0.5 hover:bg-red-50 rounded text-slate-400 hover:text-red-600"><X size={12} /></button>
+              </div>
+            </div>
           ))}
         </div>
       )}
