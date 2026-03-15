@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useEffect } from 'react';
 import Plotly from 'plotly.js-basic-dist';
 import createPlotlyComponent from 'react-plotly.js/factory';
 import type { ChartConfig, Dataset } from '../types';
+import { CHART_COLORS } from '../constants';
 
 const Plot = createPlotlyComponent(Plotly);
 
@@ -15,7 +16,11 @@ interface ChartProps {
   isSmall?: boolean;
 }
 
-import { CHART_COLORS } from '../constants';
+interface ExtendedPlotly {
+  Fx: {
+    hover: (gd: HTMLElement, evt: Array<{ curveNumber: number; xval: string | number }>) => void;
+  };
+}
 
 const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange, hoverX, onHover, isSmall }) => {
   const gdRef = useRef<HTMLElement | null>(null);
@@ -47,7 +52,7 @@ const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange,
         cleanedData.sort((a, b) => {
           const valA = parseVal(a[config.xAxis]);
           const valB = parseVal(b[config.xAxis]);
-          if (typeof valA === 'number' && typeof valB === 'number') return valA - valB;
+          if (typeof valA === 'number' && typeof valB === 'number') return (valA as number) - (valB as number);
           return String(valA).localeCompare(String(valB));
         });
 
@@ -76,17 +81,16 @@ const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange,
 
   useEffect(() => {
     const gd = gdRef.current;
-    const PlotlyFx = (Plotly as unknown as { Fx: { hover: (gd: HTMLElement, evt: unknown[]) => void } }).Fx;
     if (gd && hoverX !== null && hoverX !== undefined) {
       // Cast Plotly to access Fx which might be missing in basic-dist types but exists in runtime
-      PlotlyFx.hover(gd, [{ curveNumber: 0, xval: hoverX }]);
+      (Plotly as unknown as ExtendedPlotly).Fx.hover(gd, [{ curveNumber: 0, xval: hoverX }]);
     } else if (gd && hoverX === null) {
-      PlotlyFx.hover(gd, []);
+      (Plotly as unknown as ExtendedPlotly).Fx.hover(gd, []);
     }
   }, [hoverX]);
 
   const hasY2 = config.variables.some((v) => v.enabled && v.yAxis === 'y2');
-  const isXNumeric = plotData.length > 0 && typeof plotData[0]?.x[0] === 'number';
+  const isXNumeric = plotData.length > 0 && typeof (plotData[0] as { x: unknown[] })?.x[0] === 'number';
 
   const layout: Partial<Plotly.Layout> = {
     title: { text: config.title, font: { size: isSmall ? 14 : 18 } },
@@ -113,8 +117,8 @@ const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange,
     ...(hasY2 && {
       yaxis2: {
         title: { text: 'Secondary', font: { size: isSmall ? 10 : 12 } },
-        overlaying: 'y',
-        side: 'right',
+        overlaying: 'y' as const,
+        side: 'right' as const,
         gridcolor: 'transparent',
         autorange: true,
       },

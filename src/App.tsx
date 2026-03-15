@@ -3,10 +3,11 @@ import Papa from 'papaparse';
 import { 
   Upload, Plus, Trash2, Settings2, X, FileText, Edit2, 
   LayoutGrid, LayoutList, 
-  Link, Link2Off, Move, GitCompare, MousePointer2, Layout
+  Link, Link2Off, Move, GitCompare, MousePointer2, PanelsTopLeft
 } from 'lucide-react';
 import type { ChartConfig, Dataset } from './types';
-import Chart, { CHART_COLORS } from './components/Chart';
+import Chart from './components/Chart';
+import { CHART_COLORS } from './constants';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -50,8 +51,6 @@ const App: React.FC = () => {
   const [showCompareTool, setShowCompareTool] = useState(false);
   const [compareSourceId, setCompareSourceId] = useState<string>('');
   const [compareTargetId, setCompareTargetId] = useState<string>('');
-
-  const activeDataset = useMemo(() => datasets.find(d => d.id === activeDatasetId), [datasets, activeDatasetId]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -254,7 +253,7 @@ const App: React.FC = () => {
     return datasets.map(ds => {
       const rows = ds.data.data;
       if (rows.length === 0) return null;
-      const xAxis = activeDataset?.data.headers[0] || ds.data.headers[0];
+      const xAxis = ds.data.headers[0];
       
       let closestRow = rows[0];
       let minDiff = Infinity;
@@ -275,7 +274,7 @@ const App: React.FC = () => {
         }))
       };
     }).filter(Boolean);
-  }, [datasets, sharedHoverX, activeDataset]);
+  }, [datasets, sharedHoverX]);
 
   const ChartList = ({ dsId, isSmall }: { dsId: string, isSmall?: boolean }) => {
     const ds = datasets.find(d => d.id === dsId);
@@ -366,7 +365,7 @@ const App: React.FC = () => {
             <button onClick={() => setShowCompareTool(!showCompareTool)} className={cn("flex items-center gap-2 px-3 py-2 border rounded-lg transition-all shadow-sm text-sm", showCompareTool ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50")}><GitCompare size={16} /> <span>Compare</span></button>
           )}
           {splitView.enabled && (
-            <button onClick={() => setSplitView({ enabled: false, leftId: null, rightId: null })} className="flex items-center gap-2 px-3 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold shadow-sm hover:bg-slate-900 transition-all"><Layout size={16} /> Exit Split View</button>
+            <button onClick={() => setSplitView({ enabled: false, leftId: null, rightId: null })} className="flex items-center gap-2 px-3 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold shadow-sm hover:bg-slate-900 transition-all"><PanelsTopLeft size={16} /> Exit Split View</button>
           )}
           {datasets.length > 0 && (
             <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
