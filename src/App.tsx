@@ -38,12 +38,12 @@ const App: React.FC = () => {
   const [sharedHoverX, setSharedHoverX] = useState<number | string | null>(null);
   
   const [draggedDatasetId, setDraggedDatasetId] = useState<string | null>(null);
-  const [dropZone, setDropZone] = useState<'top' | 'bottom' | null>(null);
+  const [dropZone, setDropZone] = useState<'left' | 'right' | null>(null);
   
-  const [splitView, setSplitView] = useState<{ enabled: boolean; topId: string | null; bottomId: string | null }>({
+  const [splitView, setSplitView] = useState<{ enabled: boolean; leftId: string | null; rightId: string | null }>({
     enabled: false,
-    topId: null,
-    bottomId: null,
+    leftId: null,
+    rightId: null,
   });
 
   const [showCompareTool, setShowCompareTool] = useState(false);
@@ -218,8 +218,8 @@ const App: React.FC = () => {
       const remaining = datasets.filter(d => d.id !== id);
       setActiveDatasetId(remaining.length > 0 ? remaining[0].id : null);
     }
-    if (splitView.topId === id || splitView.bottomId === id) {
-      setSplitView({ enabled: false, topId: null, bottomId: null });
+    if (splitView.leftId === id || splitView.rightId === id) {
+      setSplitView({ enabled: false, leftId: null, rightId: null });
     }
   };
 
@@ -246,19 +246,19 @@ const App: React.FC = () => {
   const handleDrop = (targetId: string) => {
     if (!draggedDatasetId) return;
     
-    if (dropZone === 'top') {
+    if (dropZone === 'left') {
       setSplitView({
         enabled: true,
-        topId: draggedDatasetId,
-        bottomId: splitView.bottomId || (draggedDatasetId === activeDatasetId ? datasets.find(d => d.id !== draggedDatasetId)?.id || null : activeDatasetId)
+        leftId: draggedDatasetId,
+        rightId: splitView.rightId || (draggedDatasetId === activeDatasetId ? datasets.find(d => d.id !== draggedDatasetId)?.id || null : activeDatasetId)
       });
       setIsZoomSynced(true);
       setIsHoverSynced(true);
-    } else if (dropZone === 'bottom') {
+    } else if (dropZone === 'right') {
       setSplitView({
         enabled: true,
-        topId: splitView.topId || (draggedDatasetId === activeDatasetId ? datasets.find(d => d.id !== draggedDatasetId)?.id || null : activeDatasetId),
-        bottomId: draggedDatasetId
+        leftId: splitView.leftId || (draggedDatasetId === activeDatasetId ? datasets.find(d => d.id !== draggedDatasetId)?.id || null : activeDatasetId),
+        rightId: draggedDatasetId
       });
       setIsZoomSynced(true);
       setIsHoverSynced(true);
@@ -372,22 +372,22 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans p-4 md:p-6 overflow-x-hidden pb-48">
       {draggedDatasetId && (
         <>
-          <div onDragOver={(e) => { e.preventDefault(); setDropZone('top'); }} onDragLeave={() => setDropZone(null)} onDrop={(e) => { e.preventDefault(); handleDrop(draggedDatasetId); }} className={cn("fixed left-0 right-0 top-[120px] h-[80px] z-50 transition-all duration-200 pointer-events-auto flex items-center justify-center rounded-2xl mx-8", dropZone === 'top' ? "bg-blue-500/20 border-2 border-blue-500" : "bg-blue-500/5 border-2 border-dashed border-blue-300")}><span className="text-blue-600 font-bold uppercase tracking-widest text-xs">↑ Split Top</span></div>
-          <div onDragOver={(e) => { e.preventDefault(); setDropZone('bottom'); }} onDragLeave={() => setDropZone(null)} onDrop={(e) => { e.preventDefault(); handleDrop(draggedDatasetId); }} className={cn("fixed left-0 right-0 bottom-4 h-[80px] z-50 transition-all duration-200 pointer-events-auto flex items-center justify-center rounded-2xl mx-8", dropZone === 'bottom' ? "bg-blue-500/20 border-2 border-blue-500" : "bg-blue-500/5 border-2 border-dashed border-blue-300")}><span className="text-blue-600 font-bold uppercase tracking-widest text-xs">↓ Split Bottom</span></div>
+          <div onDragOver={(e) => { e.preventDefault(); setDropZone('left'); }} onDragLeave={() => setDropZone(null)} onDrop={(e) => { e.preventDefault(); handleDrop(draggedDatasetId); }} className={cn("fixed left-4 top-[140px] bottom-[20px] w-[80px] z-50 transition-all duration-200 pointer-events-auto flex items-center justify-center rounded-2xl", dropZone === 'left' ? "bg-blue-500/20 border-2 border-blue-500" : "bg-blue-500/5 border-2 border-dashed border-blue-300")}><span className="text-blue-600 font-bold uppercase tracking-widest text-xs" style={{writingMode: 'vertical-lr', transform: 'rotate(180deg)'}}>← Split Left</span></div>
+          <div onDragOver={(e) => { e.preventDefault(); setDropZone('right'); }} onDragLeave={() => setDropZone(null)} onDrop={(e) => { e.preventDefault(); handleDrop(draggedDatasetId); }} className={cn("fixed right-4 top-[140px] bottom-[20px] w-[80px] z-50 transition-all duration-200 pointer-events-auto flex items-center justify-center rounded-2xl", dropZone === 'right' ? "bg-blue-500/20 border-2 border-blue-500" : "bg-blue-500/5 border-2 border-dashed border-blue-300")}><span className="text-blue-600 font-bold uppercase tracking-widest text-xs" style={{writingMode: 'vertical-lr'}}>Split Right →</span></div>
         </>
       )}
 
       <header className="mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-3">Telemetry Plotter {splitView.enabled && <span className="text-xs px-2 py-1 bg-indigo-100 text-indigo-600 rounded-full font-bold uppercase tracking-tighter">Parallel View</span>}</h1>
-          <p className="text-slate-500 text-sm mt-1">Parallel X-axis telemetry analysis.</p>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-3">Telemetry Plotter {splitView.enabled && <span className="text-xs px-2 py-1 bg-indigo-100 text-indigo-600 rounded-full font-bold uppercase tracking-tighter">Split View</span>}</h1>
+          <p className="text-slate-500 text-sm mt-1">Side-by-side telemetry analysis.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 md:gap-3">
           {datasets.length >= 2 && !splitView.enabled && (
             <button onClick={() => setShowCompareTool(!showCompareTool)} className={cn("flex items-center gap-2 px-3 py-2 border rounded-lg transition-all shadow-sm text-sm", showCompareTool ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50")}><GitCompare size={16} /> <span>Compare</span></button>
           )}
           {splitView.enabled && (
-            <button onClick={() => setSplitView({ enabled: false, topId: null, bottomId: null })} className="flex items-center gap-2 px-3 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold shadow-sm hover:bg-slate-900 transition-all"><PanelsTopLeft size={16} /> Exit Parallel View</button>
+            <button onClick={() => setSplitView({ enabled: false, leftId: null, rightId: null })} className="flex items-center gap-2 px-3 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold shadow-sm hover:bg-slate-900 transition-all"><PanelsTopLeft size={16} /> Exit Split View</button>
           )}
           {datasets.length > 0 && (
             <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
@@ -406,7 +406,7 @@ const App: React.FC = () => {
             <select value={compareSourceId || datasets[0].id} onChange={e => setCompareSourceId(e.target.value)} className="bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500">{datasets.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
             <Move size={14} className="text-indigo-300" />
             <select value={compareTargetId || datasets[1].id} onChange={e => setCompareTargetId(e.target.value)} className="bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500">{datasets.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
-            <div className="flex gap-2 ml-auto"><button onClick={() => { setSplitView({ enabled: true, topId: compareSourceId || datasets[0].id, bottomId: compareTargetId || datasets[1].id }); setIsZoomSynced(true); setIsHoverSynced(true); setShowCompareTool(false); }} className="px-4 py-2 bg-white text-indigo-600 border border-indigo-200 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-all">Parallel View</button><button onClick={() => performOverlap(compareSourceId || datasets[0].id, compareTargetId || (compareSourceId === datasets[0].id ? datasets[1].id : datasets[0].id))} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all">Overlap</button></div>
+            <div className="flex gap-2 ml-auto"><button onClick={() => { setSplitView({ enabled: true, leftId: compareSourceId || datasets[0].id, rightId: compareTargetId || datasets[1].id }); setIsZoomSynced(true); setIsHoverSynced(true); setShowCompareTool(false); }} className="px-4 py-2 bg-white text-indigo-600 border border-indigo-200 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-all">Split View</button><button onClick={() => performOverlap(compareSourceId || datasets[0].id, compareTargetId || (compareSourceId === datasets[0].id ? datasets[1].id : datasets[0].id))} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all">Overlap</button></div>
           </div>
         </div>
       )}
@@ -424,7 +424,7 @@ const App: React.FC = () => {
               className={cn(
                 "group flex items-center gap-2 px-3 py-1.5 rounded-t-lg transition-all cursor-pointer border-x border-t -mb-[9px] relative",
                 activeDatasetId === dataset.id && !splitView.enabled ? "bg-white border-slate-200 text-blue-600 font-bold" : "bg-slate-100 border-transparent text-slate-500 hover:bg-slate-200",
-                (splitView.topId === dataset.id || splitView.bottomId === dataset.id) && "border-t-blue-400 border-t-2",
+                (splitView.leftId === dataset.id || splitView.rightId === dataset.id) && "border-t-blue-400 border-t-2",
                 draggedDatasetId === dataset.id && "opacity-50 scale-95",
                 draggedDatasetId && draggedDatasetId !== dataset.id && "ring-2 ring-indigo-300 ring-offset-1"
               )}
@@ -452,9 +452,9 @@ const App: React.FC = () => {
           </div>
         </div>
       ) : splitView.enabled ? (
-        <div className="flex flex-col gap-12 max-w-[1200px] mx-auto animate-in fade-in duration-500">
-          <div className="bg-slate-100/50 p-4 rounded-2xl border border-slate-200/60 shadow-inner">{ChartList({ dsId: splitView.topId!, isSmall: true })}</div>
-          <div className="bg-slate-100/50 p-4 rounded-2xl border border-slate-200/60 shadow-inner">{ChartList({ dsId: splitView.bottomId!, isSmall: true })}</div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-[1800px] mx-auto animate-in fade-in duration-500">
+          <div className="bg-slate-100/50 p-4 rounded-2xl border border-slate-200/60 shadow-inner">{ChartList({ dsId: splitView.leftId!, isSmall: true })}</div>
+          <div className="bg-slate-100/50 p-4 rounded-2xl border border-slate-200/60 shadow-inner">{ChartList({ dsId: splitView.rightId!, isSmall: true })}</div>
         </div>
       ) : (
         <div className="max-w-[1200px] mx-auto">
