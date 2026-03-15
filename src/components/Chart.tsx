@@ -1,6 +1,9 @@
 import React, { useMemo } from 'react';
-import Plot from 'react-plotly.js';
+import Plotly from 'plotly.js-basic-dist';
+import createPlotlyComponent from 'react-plotly.js/factory';
 import type { ChartConfig, Dataset } from '../types';
+
+const Plot = createPlotlyComponent(Plotly);
 
 interface ChartProps {
   config: ChartConfig;
@@ -9,22 +12,12 @@ interface ChartProps {
   xaxisRange?: [number | string, number | string];
   hoverX?: number | string | null;
   onHover?: (x: number | string | null) => void;
+  isSmall?: boolean;
 }
 
-export const CHART_COLORS = [
-  '#3b82f6', // blue-500
-  '#1d4ed8', // blue-700
-  '#10b981', // emerald-500
-  '#ef4444', // red-500
-  '#f59e0b', // amber-500
-  '#8b5cf6', // violet-500
-  '#ec4899', // pink-500
-  '#14b8a6', // teal-500
-  '#6366f1', // indigo-500
-  '#f43f5e', // rose-500
-];
+import { CHART_COLORS } from '../constants';
 
-const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange, hoverX, onHover }) => {
+const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange, hoverX, onHover, isSmall }) => {
   const plotData = useMemo(() => {
     return config.variables
       .filter((v) => v.enabled)
@@ -40,7 +33,7 @@ const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange,
                  y !== undefined && y !== null && y !== '';
         });
 
-        const parseVal = (val: any) => {
+        const parseVal = (val: unknown) => {
           if (typeof val === 'number') return val;
           if (typeof val === 'string' && val.trim() !== '') {
             const n = Number(val);
@@ -48,13 +41,6 @@ const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange,
           }
           return val;
         };
-
-        cleanedData.sort((a, b) => {
-          const valA = parseVal(a[config.xAxis]);
-          const valB = parseVal(b[config.xAxis]);
-          if (typeof valA === 'number' && typeof valB === 'number') return valA - valB;
-          return String(valA).localeCompare(String(valB));
-        });
 
         let xValues = cleanedData.map(row => parseVal(row[config.xAxis]));
         const yValues = cleanedData.map(row => parseVal(row[v.variable]));
@@ -83,12 +69,12 @@ const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange,
   const isXNumeric = plotData.length > 0 && typeof plotData[0]?.x[0] === 'number';
 
   const layout: Partial<Plotly.Layout> = {
-    title: { text: config.title },
+    title: { text: config.title, font: { size: isSmall ? 14 : 18 } },
     autosize: true,
-    height: 500,
-    margin: { l: 50, r: 50, b: 50, t: 80, pad: 4 },
+    height: isSmall ? 350 : 500,
+    margin: { l: 40, r: 40, b: 40, t: 60, pad: 4 },
     xaxis: {
-      title: { text: config.normalizeX ? `${config.xAxis} (Relative)` : config.xAxis },
+      title: { text: config.normalizeX ? `${config.xAxis} (Relative)` : config.xAxis, font: { size: isSmall ? 10 : 12 } },
       gridcolor: '#e2e8f0',
       range: xaxisRange,
       type: isXNumeric ? 'linear' : 'category',
@@ -100,13 +86,13 @@ const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange,
       showgrid: true,
     },
     yaxis: {
-      title: { text: 'Primary Axis' },
+      title: { text: 'Primary', font: { size: isSmall ? 10 : 12 } },
       gridcolor: '#e2e8f0',
       autorange: true,
     },
     ...(hasY2 && {
       yaxis2: {
-        title: { text: 'Secondary Axis' },
+        title: { text: 'Secondary', font: { size: isSmall ? 10 : 12 } },
         overlaying: 'y',
         side: 'right',
         gridcolor: 'transparent',
@@ -119,6 +105,7 @@ const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange,
       y: 1.02,
       xanchor: 'right' as const,
       x: 1,
+      font: { size: isSmall ? 9 : 11 }
     },
     shapes: hoverX != null ? [
       {
@@ -142,9 +129,9 @@ const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange,
   };
 
   return (
-    <div className="w-full h-full bg-white rounded-lg shadow-sm overflow-hidden p-4 border border-slate-100">
+    <div className="w-full h-full bg-white rounded-lg shadow-sm overflow-hidden p-2 md:p-4 border border-slate-100">
       <Plot
-        data={plotData as any}
+        data={plotData as Plotly.Data[]}
         layout={layout}
         useResizeHandler={true}
         style={{ width: '100%', height: '100%' }}
