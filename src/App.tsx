@@ -280,7 +280,7 @@ const App: React.FC = () => {
     if (!ds) return null;
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between px-2 bg-slate-50/80 backdrop-blur py-2 sticky top-0 z-10 rounded-lg border border-slate-200/50 mb-4">
+        <div className="flex items-center justify-between px-2 bg-slate-50/80 backdrop-blur py-2 sticky top-0 z-20 rounded-lg border border-slate-200/50 mb-4">
           <h2 className="font-bold text-slate-700 flex items-center gap-2">
             <FileText size={16} className="text-blue-500" /> {ds.name}
           </h2>
@@ -292,7 +292,7 @@ const App: React.FC = () => {
           <div className="grid grid-cols-1 gap-6">
             {dsCharts.map((chart) => (
               <div key={chart.id} className="relative group">
-                <div className="absolute right-3 top-3 z-10 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute right-3 top-3 z-20 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button onClick={() => setActiveConfigId(activeConfigId === chart.id ? null : chart.id)} className="p-1.5 bg-white/90 backdrop-blur hover:bg-white text-slate-500 rounded border border-slate-200 shadow-sm"><Settings2 size={14} /></button>
                   <button onClick={() => removeChart(chart.id)} className="p-1.5 bg-white/90 backdrop-blur hover:bg-red-50 text-red-500 rounded border border-slate-200 shadow-sm"><Trash2 size={14} /></button>
                 </div>

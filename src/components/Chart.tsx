@@ -170,6 +170,7 @@ const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange,
         config={{
           responsive: true,
           displaylogo: false,
+          displayModeBar: 'hover',
           modeBarButtonsToRemove: ['select2d', 'lasso2d'],
         }}
       />
