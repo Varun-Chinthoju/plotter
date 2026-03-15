@@ -140,33 +140,59 @@ const App: React.FC = () => {
 
   const performOverlap = (sourceId: string, targetId: string) => {
     const sourceDs = datasets.find(d => d.id === sourceId);
-    if (!sourceDs) return;
+    const targetDs = datasets.find(d => d.id === targetId);
+    if (!sourceDs || !targetDs) return;
 
-    setCharts(prevCharts => prevCharts.map(chart => {
-      if (chart.datasetId !== targetId) return chart;
-      const primaryVars = chart.variables.filter(v => v.datasetId === targetId && v.enabled);
-      const newVariables = [...chart.variables];
+    setCharts(prevCharts => {
+      // Ensure target has at least one chart to merge into
+      let targetCharts = prevCharts.filter(c => c.datasetId === targetId);
+      let workingCharts = [...prevCharts];
 
-      primaryVars.forEach(primaryVar => {
-        if (sourceDs.data.headers.includes(primaryVar.variable)) {
-          const existing = newVariables.find(v => v.datasetId === sourceId && v.variable === primaryVar.variable);
-          const oppositeColor = invertColor(primaryVar.color || CHART_COLORS[0]);
-          if (existing) {
-            existing.enabled = true;
-            existing.color = oppositeColor;
-          } else {
-            newVariables.push({
-              datasetId: sourceId,
-              variable: primaryVar.variable,
-              enabled: true,
-              yAxis: primaryVar.yAxis,
-              color: oppositeColor
-            });
+      if (targetCharts.length === 0) {
+        // Auto-create a default chart for the target dataset
+        const autoChart: ChartConfig = {
+          id: Math.random().toString(36).substr(2, 9),
+          datasetId: targetId,
+          title: `Chart 1`,
+          xAxis: targetDs.data.headers[0],
+          variables: targetDs.data.headers.slice(1).map((h, i) => ({
+            datasetId: targetId,
+            variable: h,
+            enabled: true,
+            yAxis: 'y' as const,
+            color: CHART_COLORS[i % CHART_COLORS.length]
+          })),
+        };
+        workingCharts = [...workingCharts, autoChart];
+        targetCharts = [autoChart];
+      }
+
+      return workingCharts.map(chart => {
+        if (chart.datasetId !== targetId) return chart;
+        const primaryVars = chart.variables.filter(v => v.datasetId === targetId && v.enabled);
+        const newVariables = [...chart.variables];
+
+        primaryVars.forEach(primaryVar => {
+          if (sourceDs.data.headers.includes(primaryVar.variable)) {
+            const existing = newVariables.find(v => v.datasetId === sourceId && v.variable === primaryVar.variable);
+            const oppositeColor = invertColor(primaryVar.color || CHART_COLORS[0]);
+            if (existing) {
+              existing.enabled = true;
+              existing.color = oppositeColor;
+            } else {
+              newVariables.push({
+                datasetId: sourceId,
+                variable: primaryVar.variable,
+                enabled: true,
+                yAxis: primaryVar.yAxis,
+                color: oppositeColor
+              });
+            }
           }
-        }
+        });
+        return { ...chart, variables: newVariables };
       });
-      return { ...chart, variables: newVariables };
-    }));
+    });
     setActiveDatasetId(targetId);
     setShowCompareTool(false);
   };
@@ -380,7 +406,7 @@ const App: React.FC = () => {
             <select value={compareSourceId || datasets[0].id} onChange={e => setCompareSourceId(e.target.value)} className="bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500">{datasets.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
             <Move size={14} className="text-indigo-300" />
             <select value={compareTargetId || datasets[1].id} onChange={e => setCompareTargetId(e.target.value)} className="bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500">{datasets.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
-            <div className="flex gap-2 ml-auto"><button onClick={() => { setSplitView({ enabled: true, topId: compareSourceId || datasets[0].id, bottomId: compareTargetId || datasets[1].id }); setIsZoomSynced(true); setIsHoverSynced(true); setShowCompareTool(false); }} className="px-4 py-2 bg-white text-indigo-600 border border-indigo-200 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-all">Parallel View</button><button onClick={() => performOverlap(compareSourceId || datasets[0].id, compareTargetId || datasets[1].id)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all">Overlap</button></div>
+            <div className="flex gap-2 ml-auto"><button onClick={() => { setSplitView({ enabled: true, topId: compareSourceId || datasets[0].id, bottomId: compareTargetId || datasets[1].id }); setIsZoomSynced(true); setIsHoverSynced(true); setShowCompareTool(false); }} className="px-4 py-2 bg-white text-indigo-600 border border-indigo-200 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-all">Parallel View</button><button onClick={() => performOverlap(compareSourceId || datasets[0].id, compareTargetId || (compareSourceId === datasets[0].id ? datasets[1].id : datasets[0].id))} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all">Overlap</button></div>
           </div>
         </div>
       )}
