@@ -76,16 +76,15 @@ const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange,
   useEffect(() => {
     const gd = gdRef.current;
     const PlotlyFx = (Plotly as unknown as { Fx?: { hover?: (gd: HTMLElement, evt: unknown[]) => void } }).Fx;
+    if (!PlotlyFx?.hover) return;
     if (gd && hoverX !== null && hoverX !== undefined) {
-      if (PlotlyFx && PlotlyFx.hover) {
-        PlotlyFx.hover(gd, [{ curveNumber: 0, xval: hoverX }]);
-      }
+      // Broadcast hover to ALL enabled traces so every curve in the other panel highlights
+      const evts = plotData.map((_, i) => ({ curveNumber: i, xval: hoverX }));
+      PlotlyFx.hover(gd, evts.length > 0 ? evts : [{ curveNumber: 0, xval: hoverX }]);
     } else if (gd && hoverX === null) {
-      if (PlotlyFx && PlotlyFx.hover) {
-        PlotlyFx.hover(gd, []);
-      }
+      PlotlyFx.hover(gd, []);
     }
-  }, [hoverX]);
+  }, [hoverX, plotData]);
 
   const hasY2 = config.variables.some((v) => v.enabled && v.yAxis === 'y2');
   const isXNumeric = plotData.length > 0 && typeof (plotData[0] as { x: unknown[] })?.x[0] === 'number';
