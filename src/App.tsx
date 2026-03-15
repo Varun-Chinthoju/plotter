@@ -292,7 +292,7 @@ const App: React.FC = () => {
           <div className="grid grid-cols-1 gap-6">
             {dsCharts.map((chart) => (
               <div key={chart.id} className="relative group">
-                <div className="absolute right-3 top-3 z-20 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute left-3 top-3 z-20 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button onClick={() => setActiveConfigId(activeConfigId === chart.id ? null : chart.id)} className="p-1.5 bg-white/90 backdrop-blur hover:bg-white text-slate-500 rounded border border-slate-200 shadow-sm"><Settings2 size={14} /></button>
                   <button onClick={() => removeChart(chart.id)} className="p-1.5 bg-white/90 backdrop-blur hover:bg-red-50 text-red-500 rounded border border-slate-200 shadow-sm"><Trash2 size={14} /></button>
                 </div>
