@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import Papa from 'papaparse';
 import { 
   Upload, Plus, Trash2, Settings2, X, FileText, Edit2, 
@@ -6,8 +6,7 @@ import {
   Link, Link2Off, Move, GitCompare, MousePointer2, Layout
 } from 'lucide-react';
 import type { ChartConfig, Dataset } from './types';
-import Chart from './components/Chart';
-import { CHART_COLORS } from './constants';
+import Chart, { CHART_COLORS } from './components/Chart';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -52,6 +51,8 @@ const App: React.FC = () => {
   const [compareSourceId, setCompareSourceId] = useState<string>('');
   const [compareTargetId, setCompareTargetId] = useState<string>('');
 
+  const activeDataset = useMemo(() => datasets.find(d => d.id === activeDatasetId), [datasets, activeDatasetId]);
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
@@ -67,7 +68,7 @@ const App: React.FC = () => {
             name: file.name.replace('.csv', ''),
             data: {
               headers,
-              data: results.data as Record<string, string | number>[],
+              data: results.data as any[],
             },
           };
           
@@ -81,6 +82,7 @@ const App: React.FC = () => {
     });
     event.target.value = '';
   };
+
   const addChart = useCallback((dsId: string) => {
     const ds = datasets.find(d => d.id === dsId);
     if (!ds) return;
@@ -245,31 +247,50 @@ const App: React.FC = () => {
     setDropZone(null);
   };
 
+  // 🛰️ Data HUD Values
+  const hudValues = useMemo(() => {
+    if (sharedHoverX === null) return null;
+    
+    return datasets.map(ds => {
+      const rows = ds.data.data;
+      if (rows.length === 0) return null;
+      const xAxis = activeDataset?.data.headers[0] || ds.data.headers[0];
+      
+      let closestRow = rows[0];
+      let minDiff = Infinity;
+      for (const row of rows) {
+        const xVal = Number(row[xAxis]);
+        if (isNaN(xVal)) continue;
+        const diff = Math.abs(xVal - Number(sharedHoverX));
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestRow = row;
+        }
+      }
+      return {
+        dsName: ds.name,
+        values: ds.data.headers.map(h => ({
+          name: h,
+          val: closestRow[h]
+        }))
+      };
+    }).filter(Boolean);
+  }, [datasets, sharedHoverX, activeDataset]);
+
   const ChartList = ({ dsId, isSmall }: { dsId: string, isSmall?: boolean }) => {
     const ds = datasets.find(d => d.id === dsId);
     const dsCharts = charts.filter(c => c.datasetId === dsId);
-    
     if (!ds) return null;
-    
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between px-2">
           <h2 className="font-bold text-slate-700 flex items-center gap-2">
-            <FileText size={16} className="text-blue-500" />
-            {ds.name}
+            <FileText size={16} className="text-blue-500" /> {ds.name}
           </h2>
-          <button 
-            onClick={() => addChart(dsId)}
-            className="text-xs flex items-center gap-1 px-2 py-1 bg-white border border-slate-200 rounded hover:bg-slate-50 text-slate-600 transition-colors"
-          >
-            <Plus size={12} /> Add Chart
-          </button>
+          <button onClick={() => addChart(dsId)} className="text-xs flex items-center gap-1 px-2 py-1 bg-white border border-slate-200 rounded hover:bg-slate-50 text-slate-600 transition-colors"><Plus size={12} /> Add Chart</button>
         </div>
-        
         {dsCharts.length === 0 ? (
-          <div className="text-center py-10 text-slate-400 bg-white/50 border border-dashed border-slate-200 rounded-xl text-sm">
-            No charts for this dataset.
-          </div>
+          <div className="text-center py-10 text-slate-400 bg-white/50 border border-dashed border-slate-200 rounded-xl text-sm">No charts for this dataset.</div>
         ) : (
           <div className="grid grid-cols-1 gap-6">
             {dsCharts.map((chart) => (
@@ -278,19 +299,9 @@ const App: React.FC = () => {
                   <button onClick={() => setActiveConfigId(activeConfigId === chart.id ? null : chart.id)} className="p-1.5 bg-white/90 backdrop-blur hover:bg-white text-slate-500 rounded border border-slate-200 shadow-sm"><Settings2 size={14} /></button>
                   <button onClick={() => removeChart(chart.id)} className="p-1.5 bg-white/90 backdrop-blur hover:bg-red-50 text-red-500 rounded border border-slate-200 shadow-sm"><Trash2 size={14} /></button>
                 </div>
-                
                 <div className={cn(isSmall ? "h-[350px]" : "h-[500px]")}>
-                  <Chart 
-                    config={chart} 
-                    datasets={datasets} 
-                    onRelayout={handleChartRelayout} 
-                    xaxisRange={sharedRange}
-                    hoverX={sharedHoverX}
-                    onHover={handleChartHover}
-                    isSmall={isSmall}
-                  />
+                  <Chart config={chart} datasets={datasets} onRelayout={handleChartRelayout} xaxisRange={sharedRange} hoverX={sharedHoverX} onHover={handleChartHover} isSmall={isSmall} />
                 </div>
-
                 {activeConfigId === chart.id && (
                   <div className="mt-2 p-4 bg-white rounded-xl shadow-xl border border-slate-200 z-20 relative animate-in fade-in slide-in-from-top-1 duration-200">
                     <div className="flex items-center justify-between mb-4 border-b pb-2">
@@ -299,21 +310,10 @@ const App: React.FC = () => {
                     </div>
                     <div className="grid grid-cols-1 gap-4">
                       <div className="flex gap-4">
-                        <div className="flex-1">
-                          <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Title</label>
-                          <input type="text" value={chart.title} onChange={(e) => updateChart(chart.id, { title: e.target.value })} className="w-full px-2 py-1 text-sm border border-slate-200 rounded outline-none focus:ring-1 focus:ring-blue-500" />
-                        </div>
-                        <div className="flex-1">
-                          <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">X-Axis</label>
-                          <select value={chart.xAxis} onChange={(e) => updateChart(chart.id, { xAxis: e.target.value })} className="w-full px-2 py-1 text-sm border border-slate-200 rounded outline-none bg-white">
-                            {ds.data.headers.map(h => <option key={h} value={h}>{h}</option>)}
-                          </select>
-                        </div>
+                        <div className="flex-1"><label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Title</label><input type="text" value={chart.title} onChange={(e) => updateChart(chart.id, { title: e.target.value })} className="w-full px-2 py-1 text-sm border border-slate-200 rounded outline-none focus:ring-1 focus:ring-blue-500" /></div>
+                        <div className="flex-1"><label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">X-Axis</label><select value={chart.xAxis} onChange={(e) => updateChart(chart.id, { xAxis: e.target.value })} className="w-full px-2 py-1 text-sm border border-slate-200 rounded outline-none bg-white">{ds.data.headers.map(h => <option key={h} value={h}>{h}</option>)}</select></div>
                       </div>
-                      <div className="flex items-center gap-2 px-1">
-                        <input type="checkbox" id={`norm-${chart.id}`} checked={chart.normalizeX || false} onChange={(e) => updateChart(chart.id, { normalizeX: e.target.checked })} className="w-3.5 h-3.5 rounded text-blue-600" />
-                        <label htmlFor={`norm-${chart.id}`} className="text-xs font-medium text-slate-600">Normalize X (Start at 0)</label>
-                      </div>
+                      <div className="flex items-center gap-2 px-1"><input type="checkbox" id={`norm-${chart.id}`} checked={chart.normalizeX || false} onChange={(e) => updateChart(chart.id, { normalizeX: e.target.checked })} className="w-3.5 h-3.5 rounded text-blue-600" /><label htmlFor={`norm-${chart.id}`} className="text-xs font-medium text-slate-600">Normalize X (Start at 0)</label></div>
                       <div className="max-h-48 overflow-y-auto pr-1 border rounded-lg bg-slate-50 p-2">
                         {datasets.map(d => (
                           <div key={d.id} className="mb-3 last:mb-0">
@@ -323,17 +323,11 @@ const App: React.FC = () => {
                               const isEnabled = config?.enabled || false;
                               return (
                                 <div key={h} className="flex items-center justify-between p-1.5 hover:bg-white rounded transition-colors group/var">
-                                  <div className="flex items-center gap-2">
-                                    <input type="checkbox" checked={isEnabled} onChange={() => toggleVariable(chart.id, d.id, h)} className="w-3.5 h-3.5 rounded text-blue-600" />
-                                    <span className={cn("text-xs", !isEnabled && "text-slate-400")}>{h}</span>
-                                  </div>
+                                  <div className="flex items-center gap-2"><input type="checkbox" checked={isEnabled} onChange={() => toggleVariable(chart.id, d.id, h)} className="w-3.5 h-3.5 rounded text-blue-600" /><span className={cn("text-xs", !isEnabled && "text-slate-400")}>{h}</span></div>
                                   {isEnabled && (
                                     <div className="flex items-center gap-2">
                                       <input type="color" value={config?.color || CHART_COLORS[0]} onChange={(e) => setVariableColor(chart.id, d.id, h, e.target.value)} className="w-4 h-4 p-0 border-none bg-transparent cursor-pointer rounded" />
-                                      <select value={config?.yAxis || 'y'} onChange={(e) => setVariableYAxis(chart.id, d.id, h, e.target.value as 'y' | 'y2')} className="text-[9px] border border-slate-200 rounded px-1 py-0.5 bg-white font-bold">
-                                        <option value="y">Y1</option>
-                                        <option value="y2">Y2</option>
-                                      </select>
+                                      <select value={config?.yAxis || 'y'} onChange={(e) => setVariableYAxis(chart.id, d.id, h, e.target.value as 'y' | 'y2')} className="text-[9px] border border-slate-200 rounded px-1 py-0.5 bg-white font-bold"><option value="y">Y1</option><option value="y2">Y2</option></select>
                                     </div>
                                   )}
                                 </div>
@@ -354,96 +348,47 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans p-4 md:p-6 overflow-x-hidden">
-      {/* Rectangle-style Drop Zones */}
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans p-4 md:p-6 overflow-x-hidden pb-32">
       {draggedDatasetId && (
         <>
-          <div 
-            onDragOver={(e) => { e.preventDefault(); setDropZone('left'); }}
-            onDragLeave={() => setDropZone(null)}
-            onDrop={(e) => { e.preventDefault(); handleDrop(draggedDatasetId); }}
-            className={cn(
-              "fixed left-0 top-0 bottom-0 w-[15%] z-50 transition-all duration-200 pointer-events-auto",
-              dropZone === 'left' ? "bg-blue-500/20 border-r-4 border-blue-500" : "bg-transparent"
-            )}
-          >
-            {dropZone === 'left' && <div className="absolute inset-0 flex items-center justify-center text-blue-600 font-bold uppercase tracking-widest rotate-[-90deg]">Split Left</div>}
-          </div>
-          <div 
-            onDragOver={(e) => { e.preventDefault(); setDropZone('right'); }}
-            onDragLeave={() => setDropZone(null)}
-            onDrop={(e) => { e.preventDefault(); handleDrop(draggedDatasetId); }}
-            className={cn(
-              "fixed right-0 top-0 bottom-0 w-[15%] z-50 transition-all duration-200 pointer-events-auto",
-              dropZone === 'right' ? "bg-blue-500/20 border-l-4 border-blue-500" : "bg-transparent"
-            )}
-          >
-            {dropZone === 'right' && <div className="absolute inset-0 flex items-center justify-center text-blue-600 font-bold uppercase tracking-widest rotate-[90deg]">Split Right</div>}
-          </div>
+          <div onDragOver={(e) => { e.preventDefault(); setDropZone('left'); }} onDragLeave={() => setDropZone(null)} onDrop={(e) => { e.preventDefault(); handleDrop(draggedDatasetId); }} className={cn("fixed left-0 top-0 bottom-0 w-[15%] z-50 transition-all duration-200 pointer-events-auto", dropZone === 'left' ? "bg-blue-500/20 border-r-4 border-blue-500" : "bg-transparent")}>{dropZone === 'left' && <div className="absolute inset-0 flex items-center justify-center text-blue-600 font-bold uppercase tracking-widest rotate-[-90deg]">Split Left</div>}</div>
+          <div onDragOver={(e) => { e.preventDefault(); setDropZone('right'); }} onDragLeave={() => setDropZone(null)} onDrop={(e) => { e.preventDefault(); handleDrop(draggedDatasetId); }} className={cn("fixed right-0 top-0 bottom-0 w-[15%] z-50 transition-all duration-200 pointer-events-auto", dropZone === 'right' ? "bg-blue-500/20 border-l-4 border-blue-500" : "bg-transparent")}>{dropZone === 'right' && <div className="absolute inset-0 flex items-center justify-center text-blue-600 font-bold uppercase tracking-widest rotate-[90deg]">Split Right</div>}</div>
         </>
       )}
 
       <header className="mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-3">
-            Telemetry Plotter
-            {splitView.enabled && <span className="text-xs px-2 py-1 bg-indigo-100 text-indigo-600 rounded-full font-bold uppercase tracking-tighter">Split View</span>}
-          </h1>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-3">Telemetry Plotter {splitView.enabled && <span className="text-xs px-2 py-1 bg-indigo-100 text-indigo-600 rounded-full font-bold uppercase tracking-tighter">Split View</span>}</h1>
           <p className="text-slate-500 text-sm mt-1">Side-by-side telemetry analysis.</p>
         </div>
-        
         <div className="flex flex-wrap items-center gap-2 md:gap-3">
           {datasets.length >= 2 && !splitView.enabled && (
-            <button onClick={() => setShowCompareTool(!showCompareTool)} className={cn("flex items-center gap-2 px-3 py-2 border rounded-lg transition-all shadow-sm text-sm", showCompareTool ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50")}>
-              <GitCompare size={16} /> <span>Compare</span>
-            </button>
+            <button onClick={() => setShowCompareTool(!showCompareTool)} className={cn("flex items-center gap-2 px-3 py-2 border rounded-lg transition-all shadow-sm text-sm", showCompareTool ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50")}><GitCompare size={16} /> <span>Compare</span></button>
           )}
-
           {splitView.enabled && (
-            <button onClick={() => setSplitView({ enabled: false, leftId: null, rightId: null })} className="flex items-center gap-2 px-3 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold shadow-sm hover:bg-slate-900 transition-all">
-              <Layout size={16} /> Exit Split View
-            </button>
+            <button onClick={() => setSplitView({ enabled: false, leftId: null, rightId: null })} className="flex items-center gap-2 px-3 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold shadow-sm hover:bg-slate-900 transition-all"><Layout size={16} /> Exit Split View</button>
           )}
-
           {datasets.length > 0 && (
             <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
               <button onClick={() => setIsHoverSynced(!isHoverSynced)} className={cn("p-1.5 rounded transition-all", isHoverSynced ? "bg-emerald-50 text-emerald-600" : "text-slate-400 hover:text-slate-600")} title="Sync Hover"><MousePointer2 size={16} /></button>
               <button onClick={() => { setIsZoomSynced(!isZoomSynced); if (!isZoomSynced) setSharedRange(undefined); }} className={cn("p-1.5 rounded transition-all", isZoomSynced ? "bg-blue-50 text-blue-600" : "text-slate-400 hover:text-slate-600")} title="Sync Zoom">{isZoomSynced ? <Link size={16} /> : <Link2Off size={16} />}</button>
               {!splitView.enabled && (
-                <>
-                  <div className="w-px h-4 bg-slate-200 mx-1" />
-                  <button onClick={() => setLayoutMode('single')} className={cn("p-1.5 rounded transition-all", layoutMode === 'single' ? "bg-slate-100 text-blue-600" : "text-slate-400 hover:text-slate-600")}><LayoutList size={16} /></button>
-                  <button onClick={() => setLayoutMode('grid')} className={cn("p-1.5 rounded transition-all", layoutMode === 'grid' ? "bg-slate-100 text-blue-600" : "text-slate-400 hover:text-slate-600")}><LayoutGrid size={16} /></button>
-                </>
+                <><div className="w-px h-4 bg-slate-200 mx-1" /><button onClick={() => setLayoutMode('single')} className={cn("p-1.5 rounded transition-all", layoutMode === 'single' ? "bg-slate-100 text-blue-600" : "text-slate-400 hover:text-slate-600")}><LayoutList size={16} /></button><button onClick={() => setLayoutMode('grid')} className={cn("p-1.5 rounded transition-all", layoutMode === 'grid' ? "bg-slate-100 text-blue-600" : "text-slate-400 hover:text-slate-600")}><LayoutGrid size={16} /></button></>
               )}
             </div>
           )}
-
-          <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition-colors shadow-sm text-sm font-bold">
-            <Upload size={16} /> <span>Upload</span>
-            <input type="file" accept=".csv" multiple onChange={handleFileUpload} className="hidden" />
-          </label>
+          <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition-colors shadow-sm text-sm font-bold"><Upload size={16} /> <span>Upload</span><input type="file" accept=".csv" multiple onChange={handleFileUpload} className="hidden" /></label>
         </div>
       </header>
 
       {showCompareTool && datasets.length >= 2 && !splitView.enabled && (
         <div className="mb-8 p-5 bg-indigo-50 border border-indigo-100 rounded-2xl animate-in slide-in-from-top-4 duration-300">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-indigo-900 flex items-center gap-2"><GitCompare size={18} /> Quick Compare</h3>
-            <button onClick={() => setShowCompareTool(false)} className="text-indigo-400 hover:text-indigo-600"><X size={18}/></button>
-          </div>
+          <div className="flex items-center justify-between mb-4"><h3 className="font-bold text-indigo-900 flex items-center gap-2"><GitCompare size={18} /> Quick Compare</h3><button onClick={() => setShowCompareTool(false)} className="text-indigo-400 hover:text-indigo-600"><X size={18}/></button></div>
           <div className="flex flex-wrap items-center gap-4">
-            <select value={compareSourceId || datasets[0].id} onChange={e => setCompareSourceId(e.target.value)} className="bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500">
-              {datasets.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
+            <select value={compareSourceId || datasets[0].id} onChange={e => setCompareSourceId(e.target.value)} className="bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500">{datasets.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
             <Move size={14} className="text-indigo-300" />
-            <select value={compareTargetId || datasets[1].id} onChange={e => setCompareTargetId(e.target.value)} className="bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500">
-              {datasets.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-            <div className="flex gap-2 ml-auto">
-              <button onClick={() => { setSplitView({ enabled: true, leftId: compareSourceId || datasets[0].id, rightId: compareTargetId || datasets[1].id }); setIsZoomSynced(true); setIsHoverSynced(true); setShowCompareTool(false); }} className="px-4 py-2 bg-white text-indigo-600 border border-indigo-200 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-all">Split View</button>
-              <button onClick={() => performOverlap(compareSourceId || datasets[0].id, compareTargetId || datasets[1].id)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all">Overlap</button>
-            </div>
+            <select value={compareTargetId || datasets[1].id} onChange={e => setCompareTargetId(e.target.value)} className="bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500">{datasets.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
+            <div className="flex gap-2 ml-auto"><button onClick={() => { setSplitView({ enabled: true, leftId: compareSourceId || datasets[0].id, rightId: compareTargetId || datasets[1].id }); setIsZoomSynced(true); setIsHoverSynced(true); setShowCompareTool(false); }} className="px-4 py-2 bg-white text-indigo-600 border border-indigo-200 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-all">Split View</button><button onClick={() => performOverlap(compareSourceId || datasets[0].id, compareTargetId || datasets[1].id)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all">Overlap</button></div>
           </div>
         </div>
       )}
@@ -451,27 +396,7 @@ const App: React.FC = () => {
       {datasets.length > 0 && (
         <div className="flex flex-wrap items-center gap-1 mb-6 border-b border-slate-200 pb-2 overflow-x-auto no-scrollbar">
           {datasets.map((dataset) => (
-            <div 
-              key={dataset.id}
-              draggable
-              onDragStart={() => setDraggedDatasetId(dataset.id)}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => { e.preventDefault(); handleDrop(dataset.id); }}
-              className={cn(
-                "group flex items-center gap-2 px-3 py-1.5 rounded-t-lg transition-all cursor-pointer border-x border-t -mb-[9px] relative",
-                activeDatasetId === dataset.id && !splitView.enabled ? "bg-white border-slate-200 text-blue-600 font-bold" : "bg-slate-100 border-transparent text-slate-500 hover:bg-slate-200",
-                (splitView.leftId === dataset.id || splitView.rightId === dataset.id) && "border-t-blue-400 border-t-2",
-                draggedDatasetId === dataset.id && "opacity-50 scale-95"
-              )}
-              onClick={() => { setActiveDatasetId(dataset.id); if (splitView.enabled) setSplitView({ ...splitView, enabled: false }); }}
-            >
-              <div className="cursor-grab active:cursor-grabbing text-slate-300 group-hover:text-slate-400 mr-1"><Move size={10} /></div>
-              <span className="text-xs truncate max-w-[120px]">{dataset.name}</span>
-              <div className={cn("flex items-center gap-0.5 transition-opacity", activeDatasetId === dataset.id ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
-                <button onClick={(e) => { e.stopPropagation(); setEditingDatasetId(dataset.id); setTempDatasetName(dataset.name); }} className="p-0.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-600"><Edit2 size={12} /></button>
-                <button onClick={(e) => { e.stopPropagation(); deleteDataset(dataset.id); }} className="p-0.5 hover:bg-red-50 rounded text-slate-400 hover:text-red-600"><X size={12} /></button>
-              </div>
-            </div>
+            <div key={dataset.id} draggable onDragStart={() => setDraggedDatasetId(dataset.id)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); handleDrop(dataset.id); }} className={cn("group flex items-center gap-2 px-3 py-1.5 rounded-t-lg transition-all cursor-pointer border-x border-t -mb-[9px] relative", activeDatasetId === dataset.id && !splitView.enabled ? "bg-white border-slate-200 text-blue-600 font-bold" : "bg-slate-100 border-transparent text-slate-500 hover:bg-slate-200", (splitView.leftId === dataset.id || splitView.rightId === dataset.id) && "border-t-blue-400 border-t-2", draggedDatasetId === dataset.id && "opacity-50 scale-95")} onClick={() => { setActiveDatasetId(dataset.id); if (splitView.enabled) setSplitView({ ...splitView, enabled: false }); }}><div className="cursor-grab active:cursor-grabbing text-slate-300 group-hover:text-slate-400 mr-1"><Move size={10} /></div><span className="text-xs truncate max-w-[120px]">{dataset.name}</span><div className={cn("flex items-center gap-0.5 transition-opacity", activeDatasetId === dataset.id ? "opacity-100" : "opacity-0 group-hover:opacity-100")}><button onClick={(e) => { e.stopPropagation(); setEditingDatasetId(dataset.id); setTempDatasetName(dataset.name); }} className="p-0.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-600"><Edit2 size={12} /></button><button onClick={(e) => { e.stopPropagation(); deleteDataset(dataset.id); }} className="p-0.5 hover:bg-red-50 rounded text-slate-400 hover:text-red-600"><X size={12} /></button></div></div>
           ))}
         </div>
       )}
@@ -482,30 +407,20 @@ const App: React.FC = () => {
           <h2 className="text-2xl font-bold mb-2">Ready for Telemetry</h2>
           <p className="text-slate-500 text-center max-w-sm mb-8 px-4 text-sm leading-relaxed">Upload your CSV files to start analyzing. Drag tabs to the screen edges to compare side-by-side.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-xl px-4">
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-xs text-slate-600">
-              <span className="font-bold text-blue-600 block mb-1">↔ SPLIT COMPARE</span>
-              Drag a tab to the <b className="text-slate-900">left or right edge</b> of your screen to tile datasets like Rectangle.
-            </div>
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-xs text-slate-600">
-              <span className="font-bold text-blue-600 block mb-1">⇶ OVERLAP COMPARE</span>
-              Drag one tab <b className="text-slate-900">directly onto another</b> to overlay graphs with inverted colors.
-            </div>
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-xs text-slate-600"><span className="font-bold text-blue-600 block mb-1">↔ SPLIT COMPARE</span>Drag a tab to the <b className="text-slate-900">left or right edge</b> of your screen to tile datasets like Rectangle.</div>
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-xs text-slate-600"><span className="font-bold text-blue-600 block mb-1">⇶ OVERLAP COMPARE</span>Drag one tab <b className="text-slate-900">directly onto another</b> to overlay graphs with inverted colors.</div>
           </div>
         </div>
       ) : splitView.enabled ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-[1800px] mx-auto animate-in fade-in duration-500">
-          <div className="bg-slate-100/50 p-4 rounded-2xl border border-slate-200/60 shadow-inner">
-            {ChartList({ dsId: splitView.leftId!, isSmall: true })}
-          </div>
-          <div className="bg-slate-100/50 p-4 rounded-2xl border border-slate-200/60 shadow-inner">
-            {ChartList({ dsId: splitView.rightId!, isSmall: true })}
-          </div>
+          <div className="bg-slate-100/50 p-4 rounded-2xl border border-slate-200/60 shadow-inner"><ChartList dsId={splitView.leftId!} isSmall /></div>
+          <div className="bg-slate-100/50 p-4 rounded-2xl border border-slate-200/60 shadow-inner"><ChartList dsId={splitView.rightId!} isSmall /></div>
         </div>
       ) : (
         <div className="max-w-[1400px] mx-auto">
           {activeDatasetId ? (
             <div className={cn("grid gap-8 transition-all duration-300", layoutMode === 'grid' ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1")}>
-              {ChartList({ dsId: activeDatasetId })}
+              <ChartList dsId={activeDatasetId} />
             </div>
           ) : (
             <div className="text-center py-20 text-slate-400">Select a tab to view charts.</div>
@@ -513,18 +428,39 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Inline Rename Modal */}
+      {/* 🛰️ Data HUD (Shared Values) */}
+      {sharedHoverX !== null && datasets.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-[60] bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] animate-in slide-in-from-bottom-full duration-300 overflow-x-auto">
+          <div className="max-w-[1800px] mx-auto flex items-start gap-8">
+            <div className="flex flex-col">
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">X-Axis Value</span>
+              <span className="text-xl font-black text-blue-600 tabular-nums leading-none">{sharedHoverX}</span>
+            </div>
+            <div className="h-10 w-px bg-slate-200" />
+            <div className="flex-1 flex gap-8">
+              {hudValues?.map((ds, i) => (
+                <div key={i} className="flex flex-col min-w-[200px]">
+                  <span className="text-[10px] uppercase font-bold text-slate-500 truncate mb-1">{ds?.dsName}</span>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-1">
+                    {ds?.values.map((v, j) => (
+                      <div key={j} className="flex items-center justify-between text-[11px] border-b border-slate-100/50 pb-0.5">
+                        <span className="text-slate-400 truncate pr-2">{v.name}:</span>
+                        <span className="font-mono font-bold text-slate-700">{typeof v.val === 'number' ? v.val.toFixed(3) : v.val}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {editingDatasetId && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/20 backdrop-blur-sm px-4">
           <div className="bg-white p-6 rounded-2xl shadow-2xl border border-slate-100 w-full max-w-sm animate-in zoom-in-95 duration-200">
             <h3 className="font-bold text-slate-800 mb-4">Rename Dataset</h3>
-            <input 
-              autoFocus 
-              value={tempDatasetName} 
-              onChange={(e) => setTempDatasetName(e.target.value)} 
-              onKeyDown={(e) => e.key === 'Enter' && saveDatasetName(editingDatasetId, tempDatasetName)} 
-              className="w-full px-4 py-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 mb-6" 
-            />
+            <input autoFocus value={tempDatasetName} onChange={(e) => setTempDatasetName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && saveDatasetName(editingDatasetId, tempDatasetName)} className="w-full px-4 py-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 mb-6" />
             <div className="flex gap-3 justify-end">
               <button onClick={() => setEditingDatasetId(null)} className="px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">Cancel</button>
               <button onClick={() => saveDatasetName(editingDatasetId, tempDatasetName)} className="px-6 py-2 text-sm font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-md shadow-blue-200 transition-all">Save</button>

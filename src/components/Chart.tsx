@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useEffect } from 'react';
 import Plotly from 'plotly.js-basic-dist';
 import createPlotlyComponent from 'react-plotly.js/factory';
 import type { ChartConfig, Dataset } from '../types';
@@ -18,6 +18,8 @@ interface ChartProps {
 import { CHART_COLORS } from '../constants';
 
 const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange, hoverX, onHover, isSmall }) => {
+  const gdRef = useRef<HTMLElement | null>(null);
+
   const plotData = useMemo(() => {
     return config.variables
       .filter((v) => v.enabled)
@@ -42,6 +44,13 @@ const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange,
           return val;
         };
 
+        cleanedData.sort((a, b) => {
+          const valA = parseVal(a[config.xAxis]);
+          const valB = parseVal(b[config.xAxis]);
+          if (typeof valA === 'number' && typeof valB === 'number') return valA - valB;
+          return String(valA).localeCompare(String(valB));
+        });
+
         let xValues = cleanedData.map(row => parseVal(row[config.xAxis]));
         const yValues = cleanedData.map(row => parseVal(row[v.variable]));
 
@@ -64,6 +73,17 @@ const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange,
         };
       }).filter(Boolean);
   }, [config, datasets]);
+
+  useEffect(() => {
+    const gd = gdRef.current;
+    const PlotlyFx = (Plotly as unknown as { Fx: { hover: (gd: HTMLElement, evt: unknown[]) => void } }).Fx;
+    if (gd && hoverX !== null && hoverX !== undefined) {
+      // Cast Plotly to access Fx which might be missing in basic-dist types but exists in runtime
+      PlotlyFx.hover(gd, [{ curveNumber: 0, xval: hoverX }]);
+    } else if (gd && hoverX === null) {
+      PlotlyFx.hover(gd, []);
+    }
+  }, [hoverX]);
 
   const hasY2 = config.variables.some((v) => v.enabled && v.yAxis === 'y2');
   const isXNumeric = plotData.length > 0 && typeof plotData[0]?.x[0] === 'number';
@@ -107,22 +127,6 @@ const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange,
       x: 1,
       font: { size: isSmall ? 9 : 11 }
     },
-    shapes: hoverX != null ? [
-      {
-        type: 'line',
-        xref: 'x',
-        yref: 'paper',
-        x0: hoverX,
-        x1: hoverX,
-        y0: 0,
-        y1: 1,
-        line: {
-          color: '#94a3b8',
-          width: 1,
-          dash: 'dot'
-        }
-      }
-    ] : [],
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
     hovermode: 'x unified' as const,
@@ -136,6 +140,8 @@ const Chart: React.FC<ChartProps> = ({ config, datasets, onRelayout, xaxisRange,
         useResizeHandler={true}
         style={{ width: '100%', height: '100%' }}
         onRelayout={onRelayout}
+        onInitialized={(_fig, gd) => (gdRef.current = gd)}
+        onUpdate={(_fig, gd) => (gdRef.current = gd)}
         onHover={(data) => {
           if (onHover && data.points[0]) {
             const x = data.points[0].x;
